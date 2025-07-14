@@ -17,7 +17,7 @@ class Trainer(ABC):
         # TODO: add AdamW and maybe some other optimizer variations
         return torch.optim.Adam(self.model.parameters(), lr=lr)
 
-    def train(self, num_epochs: int, device: torch.device, lr: float = 1e-3, **kwargs) -> torch.Tensor:
+    def train(self, num_epochs: int, device: torch.device, lr: float = 1e-3, **kwargs) -> None:
         # Print model size
         size_b = model_size_b(self.model)
         print(f'Model size: {size_b / MiB:.4f} MiB')
