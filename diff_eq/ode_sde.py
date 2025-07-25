@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
+
 import torch
+
 
 class ODE(ABC):
     @abstractmethod
@@ -30,7 +32,7 @@ class SDE(ABC):
     def diffusion_coefficient(self, xt: torch.Tensor, t: torch.Tensor, **kwargs) -> torch.Tensor:
         """
 
-        :param xt:simsi
+        :param xt:
         :param t:
         :param kwargs:
         :return:

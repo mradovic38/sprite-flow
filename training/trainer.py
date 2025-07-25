@@ -1,8 +1,10 @@
 from abc import ABC, abstractmethod
+
 import torch
 from torch import nn
 
 from helpers import model_size_b, MiB
+
 
 class Trainer(ABC):
     def __init__(self, model: nn.Module) -> None:
