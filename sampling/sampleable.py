@@ -4,6 +4,8 @@ from typing import List
 import torch
 from torch import nn
 
+from dataset.image_only_dataset import ImageOnlyDataset
+
 
 class Sampleable(ABC):
     """
@@ -28,5 +30,27 @@ class IsotropicGaussian(nn.Module, Sampleable):
         self.std = std
         self.dummy = nn.Buffer(torch.zeros(1)) # Will automatically be moved when self.to(...) is called
 
-    def sample(self, num_samples) -> torch.Tensor:
+    def sample(self, num_samples: int) -> torch.Tensor:
         return self.std * torch.randn(num_samples, *self.shape).to(self.dummy.device)
+
+
+class PixelArtSampler(nn.Module, Sampleable):
+    """
+    Sampleable for pixel art character dataset.
+    """
+    def __init__(self):
+        super().__init__()
+        self.dataset = ImageOnlyDataset('./dataset/images')
+        self.dummy = nn.Buffer(torch.zeros(1)) # Will automatically be moved when self.to(...) is called
+
+    def sample(self, num_samples: int) -> torch.Tensor:
+        if num_samples > len(self.dataset):
+            raise ValueError(f"Number of samples ({num_samples}) exceeds images size ({len(self.dataset)}).")
+
+        indices = torch.randperm(len(self.dataset))[:num_samples]
+        samples = [self.dataset[i] for i in indices]
+        samples = torch.stack(samples).to(self.dummy)
+
+        return samples
+
+

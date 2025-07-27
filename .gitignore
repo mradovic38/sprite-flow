@@ -9,4 +9,4 @@
 *.env
 
 # Data
-dataset
+dataset/images
