@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
 
 import torch
-from torch import vmap, jacrev
+from torch import vmap
+from torch.func import jacrev
 
 
 class Alpha(ABC):

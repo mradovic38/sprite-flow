@@ -2,10 +2,10 @@ from abc import ABC, abstractmethod
 from typing import List
 
 import torch
-from torch import nn, jacrev
+from torch import nn
 
-from sampleable import Sampleable, IsotropicGaussian
-from noise_scheduling import Alpha, Beta
+from sampling.sampleable import Sampleable, IsotropicGaussian
+from sampling.noise_scheduling import Alpha, Beta
 
 
 class ConditionalProbabilityPath(nn.Module, ABC):
