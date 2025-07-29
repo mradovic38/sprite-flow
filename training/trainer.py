@@ -4,6 +4,8 @@ import torch
 from torch import nn
 
 from helpers import model_size_b, MiB
+from sampling.conditional_probability_path import GaussianConditionalProbabilityPath
+from training.objective import ConditionalVectorField
 
 
 class Trainer(ABC):
@@ -40,3 +42,24 @@ class Trainer(ABC):
 
         # Final eval
         self.model.eval()
+
+
+class UnguidedTrainer(Trainer):
+    def __init__(self, path: GaussianConditionalProbabilityPath, model: nn.Module, eta: float):
+        assert 0 < eta < 1
+        super().__init__(model)
+        self.path = path
+
+    def get_train_loss(self, batch_size: int) -> torch.Tensor:
+        # Sample from p_data
+        z = self.path.p_data.sample(batch_size)
+        device = z.device
+
+        # Sample t and x
+        t = torch.rand(batch_size, 1, 1, 1, device=device)
+        x = self.path.sample_conditional_path(z, t)
+
+        # Regress and output loss
+        ut_theta = self.model(x, t)  # (batch_size, 3, 128, 128)
+        ut_ref = self.path.conditional_vector_field(x, z, t)  # (batch_size, 3, 128, 128)
+        return torch.mean(torch.sum(torch.square(ut_theta - ut_ref), dim=-1))

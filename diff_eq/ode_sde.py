@@ -2,6 +2,8 @@ from abc import ABC, abstractmethod
 
 import torch
 
+from training.objective import ConditionalVectorField
+
 
 class ODE(ABC):
     @abstractmethod
@@ -35,3 +37,11 @@ class SDE(ABC):
         :return: diffusion coefficient, shape (bs, c, h, w)
         """
         pass
+
+
+class UnguidedVectorFieldODE(ODE):
+    def __init__(self, net: ConditionalVectorField):
+        self.net = net
+
+    def drift_coefficient(self, xt: torch.Tensor, t: torch.Tensor, **kwargs) -> torch.Tensor:
+        return self.net(xt, t)
