@@ -38,9 +38,9 @@ class PixelArtSampler(nn.Module, Sampleable):
     """
     Sampleable for pixel art character dataset.
     """
-    def __init__(self):
+    def __init__(self, root_dir: str = '/dataset/images'):
         super().__init__()
-        self.dataset = ImageOnlyDataset('./dataset/images')
+        self.dataset = ImageOnlyDataset(root_dir)
         self.dummy = nn.Buffer(torch.zeros(1)) # Will automatically be moved when self.to(...) is called
 
     def sample(self, num_samples: int) -> torch.Tensor:

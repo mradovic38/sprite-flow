@@ -7,7 +7,7 @@ class ImageOnlyDataset(Dataset):
     """
     Dataset class to load images only (unguided generation).
     """
-    def __init__(self, root_dir="./dataset/images"):
+    def __init__(self, root_dir: str = "/dataset/images"):
         self.root_dir = root_dir
         self.image_paths = [
             os.path.join(root_dir, fname)
