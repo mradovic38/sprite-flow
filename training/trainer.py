@@ -44,8 +44,7 @@ class Trainer(ABC):
 
 
 class UnguidedTrainer(Trainer):
-    def __init__(self, path: GaussianConditionalProbabilityPath, model: nn.Module, eta: float) -> None:
-        assert 0 < eta < 1
+    def __init__(self, path: GaussianConditionalProbabilityPath, model: nn.Module) -> None:
         super().__init__(model)
         self.path = path
 
