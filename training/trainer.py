@@ -5,7 +5,6 @@ from torch import nn
 
 from helpers import model_size_b, MiB
 from sampling.conditional_probability_path import GaussianConditionalProbabilityPath
-from training.objective import ConditionalVectorField
 
 
 class Trainer(ABC):
@@ -45,7 +44,7 @@ class Trainer(ABC):
 
 
 class UnguidedTrainer(Trainer):
-    def __init__(self, path: GaussianConditionalProbabilityPath, model: nn.Module, eta: float):
+    def __init__(self, path: GaussianConditionalProbabilityPath, model: nn.Module, eta: float) -> None:
         assert 0 < eta < 1
         super().__init__(model)
         self.path = path

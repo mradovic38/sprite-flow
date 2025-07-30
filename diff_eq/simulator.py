@@ -57,7 +57,6 @@ class Simulator(ABC):
         return torch.stack(xs, dim=1)
 
 
-
 class EulerSimulator(Simulator):
     """
     Simulates an ODE using Euler method.
