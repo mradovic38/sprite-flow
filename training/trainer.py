@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 
 import torch
 from torch import nn
+from tqdm import tqdm
 
 from helpers import model_size_b, MiB
 from sampling.conditional_probability_path import GaussianConditionalProbabilityPath
@@ -16,11 +17,15 @@ class Trainer(ABC):
     def get_train_loss(self, **kwargs) -> torch.Tensor:
         pass
 
+    @abstractmethod
+    def get_validation_loss(self, **kwargs) -> torch.Tensor:
+        pass
+
     def get_optimizer(self, lr: float):
         # TODO: add AdamW and maybe some other optimizer variations
         return torch.optim.Adam(self.model.parameters(), lr=lr)
 
-    def train(self, num_epochs: int, device: torch.device, lr: float = 1e-3, **kwargs) -> None:
+    def train(self, num_epochs: int, device: torch.device, lr: float = 1e-3, validate_every: int = 1, **kwargs) -> None:
         # Print model size
         size_b = model_size_b(self.model)
         print(f'Model size: {size_b / MiB:.4f} MiB')
@@ -31,13 +36,25 @@ class Trainer(ABC):
         self.model.train()
 
         # Loop
-        # TODO: add validation
-        for idx, epoch in enumerate(range(num_epochs)):
+        pbar = tqdm(enumerate(range(num_epochs)), total=num_epochs)
+        for idx, epoch in pbar:
             opt.zero_grad()
-            loss = self.get_train_loss(**kwargs)
-            loss.backward()
+            train_loss = self.get_train_loss(**kwargs)
+            train_loss.backward()
             opt.step()
-            print(f'Epoch {epoch}, loss {loss.item():.4f}')
+
+            log = {
+                "train_loss": f"{train_loss.item():.4f}"
+            }
+
+            if validate_every > 0 and (epoch + 1) % validate_every == 0:
+                self.model.eval()
+                with torch.no_grad():
+                    val_loss = self.get_validation_loss(**kwargs)
+                    log["val_loss"] = f"{val_loss.item():.4f}"
+                self.model.train()
+
+            pbar.set_postfix(log)
 
         # Final eval
         self.model.eval()
@@ -49,8 +66,14 @@ class UnguidedTrainer(Trainer):
         self.path = path
 
     def get_train_loss(self, batch_size: int) -> torch.Tensor:
+        return self._compute_loss(batch_size, mode='train')
+
+    def get_validation_loss(self, batch_size: int) -> torch.Tensor:
+        return self._compute_loss(batch_size, mode='val')
+
+    def _compute_loss(self, batch_size: int, mode: str = 'train') -> torch.Tensor:
         # Sample from p_data
-        z = self.path.p_data.sample(batch_size)
+        z = self.path.p_data.sample(batch_size, mode=mode)
         device = z.device
 
         # Sample t and x
