@@ -81,6 +81,6 @@ class UnguidedTrainer(Trainer):
         x = self.path.sample_conditional_path(z, t)
 
         # Regress and output loss
-        ut_theta = self.model(x, t)  # (batch_size, 3, 128, 128)
-        ut_ref = self.path.conditional_vector_field(x, z, t)  # (batch_size, 3, 128, 128)
+        ut_theta = self.model(x, t)  # (batch_size, 4, 128, 128)
+        ut_ref = self.path.conditional_vector_field(x, z, t)  # (batch_size, 4, 128, 128)
         return torch.mean(torch.sum(torch.square(ut_theta - ut_ref), dim=-1))

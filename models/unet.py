@@ -144,7 +144,7 @@ class Decoder(nn.Module):
 class PixelArtUNet(ConditionalVectorField):
     def __init__(self, channels: List[int], num_residual_layers: int, t_embed_dim: int):
         super().__init__()
-        # Initial convolution: (bs, 3, 128, 128) -> (bs, c_0, 128, 128)
+        # Initial convolution: (bs, 4, 128, 128) -> (bs, c_0, 128, 128)
         self.init_conv = nn.Sequential(
             nn.Conv2d(1, channels[0], kernel_size=3, padding=1),
             nn.BatchNorm2d(channels[0]),
@@ -170,15 +170,15 @@ class PixelArtUNet(ConditionalVectorField):
 
     def forward(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
         """
-        :param x: shape (bs, 3, 128, 128)
+        :param x: shape (bs, 4, 128, 128)
         :param t: shape (bs, 1, 1, 1)
-        :return: u_t^theta(x): (bs, 3, 128, 128)
+        :return: u_t^theta(x): (bs, 4, 128, 128)
         """
         # Embed time
         t_embed = self.time_embedder(t) # (bs, time_embed_dim)
 
         # Initial convolution
-        x = self.init_conv(x) # (bs, c_0, 32, 32)
+        x = self.init_conv(x) # (bs, c_0, 128, 128)
 
         residuals = []
 
@@ -197,6 +197,6 @@ class PixelArtUNet(ConditionalVectorField):
             x = decoder(x, t_embed) # (bs, c_i, h, w) -> (bs, c_{i-1}, 2 * h, 2 * w)
 
         # Final convolution
-        x = self.final_conv(x) # (bs, 1, 32, 32)
+        x = self.final_conv(x) # (bs, 4, 128, 128)
 
         return x
