@@ -24,13 +24,9 @@ class FourierEncoder(nn.Module):
         :return: embeddings, shape (bs, dim)
         """
         t = t.view(-1, 1) # (bs, 1)
-        print("Time view changed")
         freqs = t * self.weights * 2 * math.pi # (bs, half_dim)
-        print("Frequencies calculated")
         sin_embed = torch.sin(freqs) # (bs, half_dim)
-        print("Sine embedding calculated")
         cos_embed = torch.cos(freqs) # (bs, half_dim)
-        print("Cosine embedding calculated")
         return torch.cat([sin_embed, cos_embed], dim=-1) * math.sqrt(2) # (bs, dim)
 
 
@@ -178,16 +174,11 @@ class PixelArtUNet(ConditionalVectorField):
         :param t: shape (bs, 1, 1, 1)
         :return: u_t^theta(x): (bs, 4, 128, 128)
         """
-        print("Start forward prop")
         # Embed time
         t_embed = self.time_embedder(t) # (bs, time_embed_dim)
 
-        print("Time embedded")
-
         # Initial convolution
         x = self.init_conv(x) # (bs, c_0, 128, 128)
-
-        print("Init conv completed")
 
         residuals = []
 
@@ -195,27 +186,17 @@ class PixelArtUNet(ConditionalVectorField):
         for idx, encoder in enumerate(self.encoders):
             x = encoder(x, t_embed) # (bs, c_i, h, w) -> (bs, c_{i+1}, h // 2, w //2)
             residuals.append(x.clone())
-            print(f"Encoder {idx} completed")
-
-        print("All encoders completed")
 
         # Midcoder
         x = self.midcoder(x, t_embed)
-
-        print("Midcoder completed")
 
         # Decoders
         for idx, decoder in enumerate(self.decoders):
             res = residuals.pop() # (bs, c_i, h, w)
             x = x + res
             x = decoder(x, t_embed) # (bs, c_i, h, w) -> (bs, c_{i-1}, 2 * h, 2 * w)
-            print(f"Decoder {idx} completed")
-
-        print("All decoders completed")
 
         # Final convolution
         x = self.final_conv(x) # (bs, 4, 128, 128)
-
-        print("Final conv completed")
 
         return x

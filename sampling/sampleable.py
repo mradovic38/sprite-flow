@@ -87,7 +87,7 @@ class PixelArtSampler(nn.Module, Sampleable):
         self.data_val = Subset(self.full_dataset, val_idx)
         self.data_test = Subset(self.full_dataset, test_idx)
 
-        self.dummy = nn.Buffer(torch.zeros(1))  # for device handling# Will automatically be moved when self.to(...) is called
+        self.dummy = nn.Buffer(torch.zeros(1))  # Will automatically be moved when self.to(...) is called
 
     def sample(self, num_samples: int, mode: str = 'train', **kwargs) -> torch.Tensor:
         if mode == 'train':
@@ -104,8 +104,6 @@ class PixelArtSampler(nn.Module, Sampleable):
 
         indices = torch.randperm(len(dataset))[:num_samples]
         samples = [dataset[i] for i in indices]
-        samples = torch.stack(samples).to(self.dummy)
+        samples = torch.stack(samples).to(self.dummy.device)
 
         return samples
-
-
