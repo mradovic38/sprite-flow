@@ -37,7 +37,7 @@ class Trainer(ABC):
 
         # Loop
         pbar = tqdm(enumerate(range(num_epochs)), total=num_epochs)
-        for idx, epoch in pbar:
+        for _, epoch in pbar:
             opt.zero_grad()
             train_loss = self.get_train_loss(**kwargs)
             train_loss.backward()
