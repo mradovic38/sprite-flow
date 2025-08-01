@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from typing import Tuple
 
 import torch
 from torch import nn
@@ -6,16 +7,17 @@ from torch.nn.utils import clip_grad_norm_
 from tqdm import tqdm
 import os
 
-from helpers import model_size_b, MiB
+from helpers import model_size_b, MiB, tensor_to_rgba_image
 from sampling.conditional_probability_path import GaussianConditionalProbabilityPath
 from lr_scheduling import CosineWarmupScheduler
 
 
 class Trainer(ABC):
-    def __init__(self, model: nn.Module, checkpoint_path: str = "model_checkpoint.pt") -> None:
+    def __init__(self, model: nn.Module, experiment_dir: str = "model") -> None:
         super().__init__()
         self.model = model
-        self.checkpoint_path = checkpoint_path
+        self.experiment_dir = experiment_dir
+        self.checkpoint_path = os.path.join(experiment_dir, 'best_model.pt')
 
     @abstractmethod
     def get_train_loss(self, **kwargs) -> torch.Tensor:
@@ -23,6 +25,15 @@ class Trainer(ABC):
 
     @abstractmethod
     def get_validation_loss(self, **kwargs) -> torch.Tensor:
+        pass
+
+    @abstractmethod
+    def generate_predictions(self, num_images: int, mode: str = 'val') -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        :param num_images: number of images to generate
+        :param mode: 'train', 'val' or 'test'
+        :return: ut_theta, z, x, t
+        """
         pass
 
     def get_optimizer(self, lr: float):
@@ -36,6 +47,8 @@ class Trainer(ABC):
             validate_every: int = 1,
             resume: bool = False,
             lr_warmup_steps_frac: float = 0.1,
+            num_images_to_save: int = 5,
+            save_image_every: int = 10,
             **kwargs
     ) -> None:
         """
@@ -43,9 +56,11 @@ class Trainer(ABC):
         :param num_epochs: total number of training epochs
         :param device: device to train on
         :param lr: learning rate
-        :param validate_every: validation frequency
+        :param validate_every: validation frequency (number of epochs)
         :param resume: whether to resume training or to start over, overwriting the checkpoint file
         :param lr_warmup_steps_frac: learning rate warmup steps - fraction of the total training steps
+        :param num_images_to_save: number of images to save for manual evaluation
+        :param save_image_every: how often to save images for manual evaluation (number of epochs)
         """
         # Print model size
         size_b = model_size_b(self.model)
@@ -102,10 +117,34 @@ class Trainer(ABC):
 
                 self.model.train()
 
+            if save_image_every > 0 and (epoch + 1) % save_image_every == 0:
+                self.model.eval()
+                with torch.no_grad():
+                    self._save_images(num_images_to_save, epoch + 1)
+                self.model.train()
+
             pbar.set_postfix(log)
 
         # Final eval
         self.model.eval()
+
+    def _save_images(self, num_images_to_save: int, epoch: int) -> None:
+        """
+        Saves `num_images_to_save` number of images from epoch `epoch` for manual evaluation
+        :param num_images_to_save: number of images to save for manual evaluation
+        :param epoch: current epoch number
+        """
+        self.model.eval()
+        os.makedirs(self.experiment_dir, exist_ok=True)
+        output_dir = os.path.join(self.experiment_dir, f"epoch-{epoch}")
+        os.makedirs(output_dir, exist_ok=True)
+
+        # Sample images
+        ut_theta, _, _, _ = self.generate_predictions(num_images_to_save, mode='val')
+
+        for i in range(num_images_to_save):
+            img = tensor_to_rgba_image(ut_theta[i])
+            img.save(os.path.join(output_dir, f"image_{i + 1}.png"))
 
 
 class UnguidedTrainer(Trainer):
@@ -113,13 +152,10 @@ class UnguidedTrainer(Trainer):
             self,
             path: GaussianConditionalProbabilityPath,
             model: nn.Module,
-            experiment_name: str = 'unet',
-            num_images_for_valid: int = 5,
+            experiment_dir: str = 'unet'
     ) -> None:
-        super().__init__(model, os.path.join(experiment_name, 'checkpoint.pt'))
+        super().__init__(model, experiment_dir)
         self.path = path
-        self.experiment_name = experiment_name
-        self.num_images_for_valid = num_images_for_valid
 
     def get_train_loss(self, batch_size: int) -> torch.Tensor:
         return self._compute_loss(batch_size, mode='train')
@@ -127,21 +163,21 @@ class UnguidedTrainer(Trainer):
     def get_validation_loss(self, batch_size: int) -> torch.Tensor:
         return self._compute_loss(batch_size, mode='val')
 
-    def save_validation_images(self, images: torch.Tensor) -> None:
-        raise NotImplementedError() # TODO: implement
-
-    def _compute_loss(self, batch_size: int, mode: str = 'train') -> torch.Tensor:
+    def generate_predictions(self, num_images: int, mode: str = 'val') -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         # Sample from p_data
-        z = self.path.p_data.sample(batch_size, mode=mode)
+        z = self.path.p_data.sample(num_images, mode=mode)
         device = z.device
 
         # Sample t and x
-        t = torch.rand(batch_size, 1, 1, 1, device=device)
+        t = torch.rand(num_images, 1, 1, 1, device=device)
         x = self.path.sample_conditional_path(z, t)
 
-        # Regress and output loss
+        # Regress
         ut_theta = self.model(x, t)  # (batch_size, 4, 128, 128)
-        if mode == 'val' and ut_theta.shape[0] <= self.num_images_for_valid:
-            self.save_validation_images(ut_theta[:self.num_images_for_valid])
+        return ut_theta, z, x, t
+
+    def _compute_loss(self, batch_size: int, mode: str = 'train') -> torch.Tensor:
+        ut_theta, z, x, t = self.generate_predictions(num_images=batch_size, mode=mode)
+        # Output loss
         ut_ref = self.path.conditional_vector_field(x, z, t)  # (batch_size, 4, 128, 128)
         return torch.mean(torch.sum(torch.square(ut_theta - ut_ref), dim=-1))
