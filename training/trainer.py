@@ -42,26 +42,28 @@ class Trainer(ABC):
 
     def train(
             self,
-            num_epochs: int,
             device: torch.device,
+            num_epochs: int,
+            batch_size: int = 128,
             lr: float = 1e-3,
             validate_every: int = 1,
             resume: bool = False,
             lr_warmup_steps_frac: float = 0.1,
             num_images_to_save: int = 5,
-            save_image_every: int = 10,
+            save_images_every: int = 10,
             **kwargs
     ) -> None:
         """
         Trains the model and saves the model checkpoints.
-        :param num_epochs: total number of training epochs
         :param device: device to train on
+        :param num_epochs: total number of training epochs
+        :param batch_size
         :param lr: learning rate
         :param validate_every: validation frequency (number of epochs)
         :param resume: whether to resume training or to start over, overwriting the checkpoint file
         :param lr_warmup_steps_frac: learning rate warmup steps - fraction of the total training steps
         :param num_images_to_save: number of images to save for manual evaluation
-        :param save_image_every: how often to save images for manual evaluation (number of epochs)
+        :param save_images_every: how often to save images for manual evaluation (number of epochs)
         """
         # Print model size
         size_b = model_size_b(self.model)
@@ -90,7 +92,7 @@ class Trainer(ABC):
 
         for _, epoch in pbar:
             opt.zero_grad()
-            train_loss = self.get_train_loss(**kwargs)
+            train_loss = self.get_train_loss(batch_size=batch_size, **kwargs)
             train_loss.backward()
             clip_grad_norm_(self.model.parameters(), max_norm=1.0)
             opt.step()
@@ -101,7 +103,7 @@ class Trainer(ABC):
             if validate_every > 0 and (epoch + 1) % validate_every == 0:
                 self.model.eval()
                 with torch.no_grad():
-                    val_loss = self.get_validation_loss(**kwargs)
+                    val_loss = self.get_validation_loss(batch_size=batch_size, **kwargs)
                     val_loss_value = val_loss.item()
                     log["val_loss"] = f"{val_loss_value:.4f}"
 
@@ -118,7 +120,7 @@ class Trainer(ABC):
 
                 self.model.train()
 
-            if save_image_every > 0 and (epoch + 1) % save_image_every == 0:
+            if save_images_every > 0 and (epoch + 1) % save_images_every == 0:
                 self.model.eval()
                 with torch.no_grad():
                     self._save_images(num_images_to_save, epoch + 1)
