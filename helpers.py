@@ -19,6 +19,7 @@ def model_size_b(model: nn.Module) -> int:
         size += buf.nelement() * buf.element_size()
     return size
 
+
 def tensor_to_rgba_image(tensor: torch.Tensor) -> Image.Image:
     """
     Converts a (4, H, W) tensor to a transparent PNG image. Assumes 4 channels: R, G, B, A in [0, 1] range.

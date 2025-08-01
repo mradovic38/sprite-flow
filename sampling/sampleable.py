@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import List
+from typing import List, Iterator
 
 import torch
 from torch import nn
@@ -18,6 +18,21 @@ class Sampleable(ABC):
         """
         :param num_samples
         :return: samples: shape (batch_size, ...)
+        """
+        pass
+
+
+class IterableSampleable(ABC, Sampleable):
+    """
+    Sampleable for finite datasets.
+    """
+    @abstractmethod
+    def iterate_dataset(self, batch_size: int, mode: str = 'val') -> Iterator[torch.Tensor]:
+        """
+        Iterates over the entire dataset (val/test) in mini-batches of size `batch_size`.
+        :param batch_size: number of images per batch
+        :param mode: 'train', 'val', or 'test'
+        :return: yields batches as torch tensors
         """
         pass
 
@@ -53,7 +68,7 @@ class IsotropicGaussian(nn.Module, Sampleable):
             return self.std * torch.randn(num_samples, C, H, W, device=device)
 
 
-class PixelArtSampler(nn.Module, Sampleable):
+class PixelArtSampler(nn.Module, IterableSampleable):
     """
     Sampleable for pixel art character dataset.
     """
@@ -64,7 +79,6 @@ class PixelArtSampler(nn.Module, Sampleable):
             train_factor: float = 0.7,
             val_factor:float = 0.15
     ) -> None:
-
         super().__init__()
         self.full_dataset = ImageOnlyDataset(root_dir)
 
@@ -107,3 +121,18 @@ class PixelArtSampler(nn.Module, Sampleable):
         samples = torch.stack(samples).to(self.dummy.device)
 
         return samples
+
+    def iterate_dataset(self, batch_size: int, mode: str = 'val') -> Iterator[torch.Tensor]:
+        if mode == 'train':
+            dataset = self.data_train
+        elif mode == 'val':
+            dataset = self.data_val
+        elif mode == 'test':
+            dataset = self.data_test
+        else:
+            raise ValueError(f"Invalid mode '{mode}'. Must be one of 'train', 'val', 'test'.")
+
+        device = self.dummy.device
+        for start_idx in range(0, len(dataset), batch_size):
+            batch = [dataset[i] for i in range(start_idx, min(start_idx + batch_size, len(dataset)))]
+            yield torch.stack(batch).to(device)

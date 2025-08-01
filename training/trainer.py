@@ -10,6 +10,7 @@ import os
 from helpers import model_size_b, MiB, tensor_to_rgba_image
 from sampling.conditional_probability_path import GaussianConditionalProbabilityPath
 from lr_scheduling import CosineWarmupScheduler
+from sampling.sampleable import IterableSampleable
 
 
 class Trainer(ABC):
@@ -28,7 +29,7 @@ class Trainer(ABC):
         pass
 
     @abstractmethod
-    def generate_predictions(self, num_images: int, mode: str = 'val') -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    def generate_predictions(self, num_images: int, mode: str = 'train') -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         :param num_images: number of images to generate
         :param mode: 'train', 'val' or 'test'
@@ -136,7 +137,7 @@ class Trainer(ABC):
         """
         self.model.eval()
         os.makedirs(self.experiment_dir, exist_ok=True)
-        output_dir = os.path.join(self.experiment_dir, f"epoch-{epoch}")
+        output_dir = os.path.join(self.experiment_dir, f"epoch-{epoch+1}")
         os.makedirs(output_dir, exist_ok=True)
 
         # Sample images
@@ -161,9 +162,12 @@ class UnguidedTrainer(Trainer):
         return self._compute_loss(batch_size, mode='train')
 
     def get_validation_loss(self, batch_size: int) -> torch.Tensor:
-        return self._compute_loss(batch_size, mode='val')
+        return self._compute_loss_all_batches(batch_size, mode='val')
 
-    def generate_predictions(self, num_images: int, mode: str = 'val') -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    def get_test_loss(self, batch_size: int) -> torch.Tensor:
+        return self._compute_loss_all_batches(batch_size, mode='test')
+
+    def generate_predictions(self, num_images: int, mode: str = 'train') -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         # Sample from p_data
         z = self.path.p_data.sample(num_images, mode=mode)
         device = z.device
@@ -173,11 +177,35 @@ class UnguidedTrainer(Trainer):
         x = self.path.sample_conditional_path(z, t)
 
         # Regress
-        ut_theta = self.model(x, t)  # (batch_size, 4, 128, 128)
+        ut_theta = self.model(x, t)  # (num_images, 4, 128, 128)
         return ut_theta, z, x, t
 
     def _compute_loss(self, batch_size: int, mode: str = 'train') -> torch.Tensor:
+        # Generate predictions
         ut_theta, z, x, t = self.generate_predictions(num_images=batch_size, mode=mode)
-        # Output loss
+        # Calculate and return loss
         ut_ref = self.path.conditional_vector_field(x, z, t)  # (batch_size, 4, 128, 128)
         return torch.mean(torch.sum(torch.square(ut_theta - ut_ref), dim=-1))
+
+    def _compute_loss_all_batches(self, batch_size: int, mode: str = 'val') -> torch.Tensor:
+        total_loss = 0.0
+        num_batches = 0
+
+        if isinstance(self.path.p_data, IterableSampleable):
+            # Finite dataset => Iterate over the dataset in batches
+            for batch in self.path.p_data.iterate_dataset(batch_size=batch_size, mode=mode):
+                batch = batch.to(self.model.device)
+                z = batch
+                t = torch.rand(batch.size(0), 1, 1, 1, device=batch.device)
+                x = self.path.sample_conditional_path(z, t)
+                ut_theta = self.model(x, t)
+                ut_ref = self.path.conditional_vector_field(x, z, t)  # (batch_size, 4, 128, 128)
+                loss = torch.mean(torch.sum(torch.square(ut_theta - ut_ref), dim=-1))
+                total_loss += loss.detach()
+                num_batches += 1
+        else:
+            # Fallback: use one batch
+            loss = self._compute_loss(batch_size=batch_size, mode=mode)
+            return loss
+
+        return total_loss / num_batches
