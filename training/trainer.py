@@ -3,9 +3,11 @@ from abc import ABC, abstractmethod
 import torch
 from torch import nn
 from tqdm import tqdm
+import os
 
 from helpers import model_size_b, MiB
 from sampling.conditional_probability_path import GaussianConditionalProbabilityPath
+from lr_scheduling import CosineWarmupScheduler
 
 
 class Trainer(ABC):
@@ -22,36 +24,81 @@ class Trainer(ABC):
         pass
 
     def get_optimizer(self, lr: float):
-        # TODO: add AdamW and maybe some other optimizer variations
         return torch.optim.Adam(self.model.parameters(), lr=lr)
 
-    def train(self, num_epochs: int, device: torch.device, lr: float = 1e-3, validate_every: int = 1, **kwargs) -> None:
+    def train(
+            self,
+            num_epochs: int,
+            device: torch.device,
+            lr: float = 1e-3,
+            validate_every: int = 1,
+            checkpoint_path: str = "model_checkpoint.pt",
+            resume: bool = False,
+            lr_warmup_steps_frac: float = 0.1,
+            **kwargs
+    ) -> None:
+        """
+        Trains the model and saves the model checkpoints.
+        :param num_epochs: total number of training epochs
+        :param device: device to train on
+        :param lr: learning rate
+        :param validate_every: validation frequency
+        :param checkpoint_path: path to checkpoint file
+        :param resume: whether to resume training or to start over, overwriting the checkpoint file
+        :param lr_warmup_steps_frac: learning rate warmup steps - fraction of the total training steps
+        """
         # Print model size
         size_b = model_size_b(self.model)
         print(f'Model size: {size_b / MiB:.4f} MiB')
 
-        # Start
         self.model.to(device)
         opt = self.get_optimizer(lr)
-        self.model.train()
+        warmup_steps = lr_warmup_steps_frac * num_epochs
+        scheduler = CosineWarmupScheduler(optimizer=opt, num_warmup_steps=warmup_steps, num_training_steps=num_epochs)
 
-        # Loop
-        pbar = tqdm(enumerate(range(num_epochs)), total=num_epochs)
+        start_epoch = 0
+        best_val_loss = float("inf")
+
+        # Optionally load from checkpoints
+        if resume and os.path.exists(checkpoint_path):
+            checkpoint = torch.load(checkpoint_path, map_location=device)
+            self.model.load_state_dict(checkpoint["model_state"])
+            opt.load_state_dict(checkpoint["optimizer_state"])
+            best_val_loss = checkpoint["best_val_loss"]
+            start_epoch = checkpoint["epoch"] + 1
+            print(f"Resumed from checkpoint at epoch {start_epoch}")
+
+        # Start training
+        self.model.train()
+        pbar = tqdm(enumerate(range(start_epoch, num_epochs)), total=num_epochs-start_epoch)
+
         for _, epoch in pbar:
             opt.zero_grad()
             train_loss = self.get_train_loss(**kwargs)
             train_loss.backward()
             opt.step()
+            scheduler.step()
 
-            log = {
-                "train_loss": f"{train_loss.item():.4f}"
-            }
+            log = {"train_loss": f"{train_loss.item():.4f}"}
 
             if validate_every > 0 and (epoch + 1) % validate_every == 0:
                 self.model.eval()
                 with torch.no_grad():
                     val_loss = self.get_validation_loss(**kwargs)
-                    log["val_loss"] = f"{val_loss.item():.4f}"
+                    val_loss_value = val_loss.item()
+                    log["val_loss"] = f"{val_loss_value:.4f}"
+
+                # Save if best
+                if val_loss_value < best_val_loss:
+                    best_val_loss = val_loss_value
+                    torch.save({
+                        "epoch": epoch,
+                        "model_state": self.model.state_dict(),
+                        "optimizer_state": opt.state_dict(),
+                        "best_val_loss": best_val_loss,
+                    }, checkpoint_path)
+                    log["checkpoint"] = "saved"
+
                 self.model.train()
 
             pbar.set_postfix(log)
