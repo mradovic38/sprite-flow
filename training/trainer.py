@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 
 import torch
 from torch import nn
+from torch.nn.utils import clip_grad_norm_
 from tqdm import tqdm
 import os
 
@@ -76,6 +77,7 @@ class Trainer(ABC):
             opt.zero_grad()
             train_loss = self.get_train_loss(**kwargs)
             train_loss.backward()
+            clip_grad_norm_(self.model.parameters(), max_norm=1.0)
             opt.step()
             scheduler.step()
 
