@@ -58,8 +58,6 @@ class IsotropicGaussian(nn.Module, Sampleable):
         device = self.dummy.device
         C, H, W = self.shape
 
-        print(self.binary_alpha)
-        print(C)
         if self.binary_alpha and C >= 4:
             rgb = self.std * torch.randn(num_samples, C - 1, H, W, device=device)
             alpha = torch.randint(0, 2, (num_samples, 1, H, W), device=device).float()

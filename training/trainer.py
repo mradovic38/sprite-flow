@@ -11,25 +11,45 @@ from helpers import model_size_b, MiB, tensor_to_rgba_image
 from sampling.conditional_probability_path import GaussianConditionalProbabilityPath
 from lr_scheduling import CosineWarmupScheduler
 from sampling.sampleable import IterableSampleable
+from evaluation import EvaluationMetric
+from diff_eq.ode_sde import UnguidedVectorFieldODE
+from diff_eq.simulator import EulerSimulator
+from training.objective import ConditionalVectorField
 
 
 class Trainer(ABC):
-    def __init__(self, model: nn.Module, experiment_dir: str = "model") -> None:
+    def __init__(self, model: nn.Module, eval_metric: EvaluationMetric, experiment_dir: str = "model") -> None:
         super().__init__()
         self.model = model
         self.experiment_dir = experiment_dir
         self.checkpoint_path = os.path.join(experiment_dir, 'best_model.pt')
+        self.eval_metric = eval_metric
 
     @abstractmethod
     def get_train_loss(self, **kwargs) -> torch.Tensor:
         pass
 
     @abstractmethod
-    def get_validation_loss(self, **kwargs) -> torch.Tensor:
+    def evaluate(self, **kwargs) -> torch.Tensor:
         pass
 
     @abstractmethod
-    def generate_predictions(self, num_images: int, mode: str = 'train') -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    def save_images(self, num_images_to_save: int, epoch: int, device: torch.device, num_timesteps: int = 100) -> None:
+        """
+        Saves `num_images_to_save` number of images from epoch `epoch` for manual evaluation
+        :param num_images_to_save: number of images to save for manual evaluation
+        :param epoch: current epoch number
+        :param device: device to perform calculations on
+        :param num_timesteps: number of timesteps of the denoising process
+        """
+        pass
+
+    @abstractmethod
+    def generate_predictions(
+            self,
+            num_images: int,
+            mode: str = 'train',
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         :param num_images: number of images to generate
         :param mode: 'train', 'val' or 'test'
@@ -103,7 +123,7 @@ class Trainer(ABC):
             if validate_every > 0 and (epoch + 1) % validate_every == 0:
                 self.model.eval()
                 with torch.no_grad():
-                    val_loss = self.get_validation_loss(batch_size=batch_size, **kwargs)
+                    val_loss = self.evaluate(batch_size=batch_size, mode='val', device=device, **kwargs)
                     val_loss_value = val_loss.item()
                     log["val_loss"] = f"{val_loss_value:.4f}"
 
@@ -122,7 +142,7 @@ class Trainer(ABC):
             if save_images_every > 0 and (epoch + 1) % save_images_every == 0:
                 self.model.eval()
                 with torch.no_grad():
-                    self._save_images(num_images_to_save, epoch + 1)
+                    self.save_images(num_images_to_save, epoch + 1, device)
                 self.model.train()
 
             pbar.set_postfix(log)
@@ -130,45 +150,25 @@ class Trainer(ABC):
         # Final eval
         self.model.eval()
 
-    def _save_images(self, num_images_to_save: int, epoch: int) -> None:
-        """
-        Saves `num_images_to_save` number of images from epoch `epoch` for manual evaluation
-        :param num_images_to_save: number of images to save for manual evaluation
-        :param epoch: current epoch number
-        """
-        self.model.eval()
-        os.makedirs(self.experiment_dir, exist_ok=True)
-        output_dir = os.path.join(self.experiment_dir, f"epoch-{epoch}")
-        os.makedirs(output_dir, exist_ok=True)
-
-        # Sample images
-        ut_theta, _, _, _ = self.generate_predictions(num_images_to_save, mode='val')
-
-        for i in range(num_images_to_save):
-            img = tensor_to_rgba_image(ut_theta[i])
-            img.save(os.path.join(output_dir, f"image_{i + 1}.png"))
-
-
 class UnguidedTrainer(Trainer):
     def __init__(
             self,
             path: GaussianConditionalProbabilityPath,
             model: nn.Module,
+            eval_metric: EvaluationMetric,
             experiment_dir: str = 'unet'
     ) -> None:
-        super().__init__(model, experiment_dir)
+        super().__init__(model, eval_metric, experiment_dir)
         self.path = path
 
     def get_train_loss(self, batch_size: int) -> torch.Tensor:
         return self._compute_loss(batch_size, mode='train')
 
-    def get_validation_loss(self, batch_size: int) -> torch.Tensor:
-        return self._compute_loss_all_batches(batch_size, mode='val')
-
-    def get_test_loss(self, batch_size: int) -> torch.Tensor:
-        return self._compute_loss_all_batches(batch_size, mode='test')
-
-    def generate_predictions(self, num_images: int, mode: str = 'train') -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    def generate_predictions(
+            self,
+            num_images: int,
+            mode: str = 'train',
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         # Sample from p_data
         z = self.path.p_data.sample(num_images, mode=mode)
         device = z.device
@@ -188,29 +188,52 @@ class UnguidedTrainer(Trainer):
         ut_ref = self.path.conditional_vector_field(x, z, t)  # (batch_size, 4, 128, 128)
         return torch.mean(torch.sum(torch.square(ut_theta - ut_ref), dim=-1))
 
-    def _compute_loss_all_batches(self, batch_size: int, mode: str = 'val') -> torch.Tensor:
-        total_loss = 0.0
+    def evaluate(self, batch_size: int, device: torch.device, num_timesteps: int = 100, mode: str = 'val') -> torch.Tensor:
+        #  TODO: implement cleaner solution
+        assert isinstance(self.path.p_data, IterableSampleable) and isinstance(self.model, ConditionalVectorField)
+
+        ode = UnguidedVectorFieldODE(self.model)
+        simulator = EulerSimulator(ode)
+        total_fid = 0.0
         num_batches = 0
 
-        if isinstance(self.path.p_data, IterableSampleable):
-            # Finite dataset => Iterate over the dataset in batches
-            for z in self.path.p_data.iterate_dataset(batch_size=batch_size, mode=mode):
-                device = z.device
-                t = torch.rand(z.size(0), 1, 1, 1, device=device)
-                x = self.path.sample_conditional_path(z, t)
-                ut_theta = self.model(x, t)
-                ut_ref = self.path.conditional_vector_field(x, z, t)  # (batch_size, 4, 128, 128)
-                loss = torch.mean(torch.sum(torch.square(ut_theta - ut_ref), dim=-1))
-                total_loss += loss.item()
-                num_batches += 1
+        # Loop over validation/test dataset
+        for real_batch in self.path.p_data.iterate_dataset(batch_size, mode=mode):
+            real_batch = real_batch.to(device)  # (B, 4, 128, 128)
 
-            if num_batches == 0:
-                raise ValueError(f"No batches found in mode={mode} dataset.")
+            # Generate matching number of fake images
+            B = real_batch.shape[0]
+            ts = torch.linspace(0, 1, steps=num_timesteps).view(1, -1, 1, 1, 1).expand(B, -1, 1, 1, 1).to(device)
+            x0 = self.path.p_simple.sample(B).to(device)  # prior sample (B, 4, 128, 128)
+            generated = simulator.simulate(x0, ts)[:, :4]  # match RGBA shape
 
-            return torch.tensor(total_loss / num_batches, device=device)
+            # Compute FID for this batch
+            fid = self.eval_metric.evaluate(real_batch, generated, device)
+            total_fid += fid
+            num_batches += 1
 
-        else:
-            # Fallback: use one batch
-            return self._compute_loss(batch_size=batch_size, mode=mode)
+        avg_fid = total_fid / num_batches if num_batches > 0 else float("nan")
+        return avg_fid
 
-        
+    def save_images(self, num_images_to_save: int, epoch: int, device: torch.device, num_timesteps: int = 100) -> None:
+        assert isinstance(self.path.p_data, IterableSampleable) and isinstance(self.model, ConditionalVectorField)
+
+        self.model.eval()
+        os.makedirs(self.experiment_dir, exist_ok=True)
+        output_dir = os.path.join(self.experiment_dir, f"epoch-{epoch}")
+        os.makedirs(output_dir, exist_ok=True)
+
+        # Create time steps
+        ts = torch.linspace(0, 1, steps=num_timesteps).view(1, -1, 1, 1, 1)
+        ts = ts.expand(num_images_to_save, -1, 1, 1, 1).to(device)
+
+        # Sample from prior and simulate
+        x0 = self.path.p_simple.sample(num_images_to_save).to(ts.device)
+        ode = UnguidedVectorFieldODE(self.model)
+        simulator = EulerSimulator(ode)
+        generated = simulator.simulate(x0, ts)  # (B, 4, H, W)
+
+        for i in range(num_images_to_save):
+            img_tensor = generated[i]
+            img = tensor_to_rgba_image(img_tensor)  # Expects a tensor in [-1, 1] or [0, 1], shape (4, H, W)
+            img.save(os.path.join(output_dir, f"image_{i + 1}.png"))
