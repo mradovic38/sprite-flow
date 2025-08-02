@@ -33,7 +33,7 @@ class Trainer(ABC):
         """
         :param num_images: number of images to generate
         :param mode: 'train', 'val' or 'test'
-        :return: ut_theta, z, x, t
+        :return: (ut_theta, z, x, t)
         """
         pass
 
@@ -116,7 +116,6 @@ class Trainer(ABC):
                         "optimizer_state": opt.state_dict(),
                         "best_val_loss": best_val_loss,
                     }, self.checkpoint_path)
-                    log["checkpoint"] = "saved"
 
                 self.model.train()
 
@@ -139,7 +138,7 @@ class Trainer(ABC):
         """
         self.model.eval()
         os.makedirs(self.experiment_dir, exist_ok=True)
-        output_dir = os.path.join(self.experiment_dir, f"epoch-{epoch+1}")
+        output_dir = os.path.join(self.experiment_dir, f"epoch-{epoch}")
         os.makedirs(output_dir, exist_ok=True)
 
         # Sample images
