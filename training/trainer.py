@@ -194,19 +194,23 @@ class UnguidedTrainer(Trainer):
 
         if isinstance(self.path.p_data, IterableSampleable):
             # Finite dataset => Iterate over the dataset in batches
-            for batch in self.path.p_data.iterate_dataset(batch_size=batch_size, mode=mode):
-                batch = batch.to(self.model.device)
-                z = batch
-                t = torch.rand(batch.size(0), 1, 1, 1, device=batch.device)
+            for z in self.path.p_data.iterate_dataset(batch_size=batch_size, mode=mode):
+                device = z.device
+                t = torch.rand(z.size(0), 1, 1, 1, device=device)
                 x = self.path.sample_conditional_path(z, t)
                 ut_theta = self.model(x, t)
                 ut_ref = self.path.conditional_vector_field(x, z, t)  # (batch_size, 4, 128, 128)
                 loss = torch.mean(torch.sum(torch.square(ut_theta - ut_ref), dim=-1))
-                total_loss += loss.detach()
+                total_loss += loss.item()
                 num_batches += 1
+
+            if num_batches == 0:
+                raise ValueError(f"No batches found in mode={mode} dataset.")
+
+            return torch.tensor(total_loss / num_batches, device=device)
+
         else:
             # Fallback: use one batch
-            loss = self._compute_loss(batch_size=batch_size, mode=mode)
-            return loss
+            return self._compute_loss(batch_size=batch_size, mode=mode)
 
-        return total_loss / num_batches
+        

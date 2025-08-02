@@ -22,7 +22,7 @@ class Sampleable(ABC):
         pass
 
 
-class IterableSampleable(ABC, Sampleable):
+class IterableSampleable(ABC):
     """
     Sampleable for finite datasets.
     """
