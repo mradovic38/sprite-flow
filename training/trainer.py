@@ -95,14 +95,14 @@ class Trainer(ABC):
         scheduler = CosineWarmupScheduler(optimizer=opt, num_warmup_steps=warmup_steps, num_training_steps=num_epochs)
 
         start_epoch = 0
-        best_val_loss = float("inf")
+        best_val_metric = float("inf")
 
         # Optionally load from checkpoints
         if resume and os.path.exists(self.checkpoint_path):
             checkpoint = torch.load(self.checkpoint_path, map_location=device)
             self.model.load_state_dict(checkpoint["model_state"])
             opt.load_state_dict(checkpoint["optimizer_state"])
-            best_val_loss = checkpoint["best_val_loss"]
+            best_val_metric = checkpoint["best_val_metric"]
             start_epoch = checkpoint["epoch"] + 1
             print(f"Resumed from checkpoint at epoch {start_epoch}")
 
@@ -123,18 +123,18 @@ class Trainer(ABC):
             if validate_every > 0 and (epoch + 1) % validate_every == 0:
                 self.model.eval()
                 with torch.no_grad():
-                    val_loss = self.evaluate(batch_size=batch_size, mode='val', device=device, **kwargs)
-                    val_loss_value = val_loss.item()
-                    log["val_loss"] = f"{val_loss_value:.4f}"
+                    val_metric = self.evaluate(batch_size=batch_size, mode='val', device=device, **kwargs)
+                    val_metric_value = val_metric.item()
+                    log["val_metric"] = f"{val_metric_value:.4f}"
 
                 # Save if best
-                if val_loss_value < best_val_loss:
-                    best_val_loss = val_loss_value
+                if val_metric_value < best_val_metric:
+                    best_val_metric = val_metric_value
                     torch.save({
                         "epoch": epoch,
                         "model_state": self.model.state_dict(),
                         "optimizer_state": opt.state_dict(),
-                        "best_val_loss": best_val_loss,
+                        "best_val_metric": best_val_metric,
                     }, self.checkpoint_path)
 
                 self.model.train()
@@ -194,7 +194,7 @@ class UnguidedTrainer(Trainer):
 
         ode = UnguidedVectorFieldODE(self.model)
         simulator = EulerSimulator(ode)
-        total_fid = 0.0
+        total_fid = torch.tensor(0.0, device=device)
         num_batches = 0
 
         # Loop over validation/test dataset
@@ -212,7 +212,10 @@ class UnguidedTrainer(Trainer):
             total_fid += fid
             num_batches += 1
 
-        avg_fid = total_fid / num_batches if num_batches > 0 else float("nan")
+        if num_batches > 0:
+            avg_fid = total_fid / num_batches
+        else:
+            avg_fid = torch.tensor(float("nan"), device=device)
         return avg_fid
 
     def save_images(self, num_images_to_save: int, epoch: int, device: torch.device, num_timesteps: int = 100) -> None:
