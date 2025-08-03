@@ -36,34 +36,22 @@ class IterableSampleable(ABC):
         """
         pass
 
-
 class IsotropicGaussian(nn.Module, Sampleable):
-    def __init__(self, shape: List[int], std: float = 1.0, binary_alpha: bool = True):
+    def __init__(self, shape: List[int], std: float = 1.0):
         """
         :param shape: shape of sampled data, e.g. [4, 128, 128]
         :param std: standard deviation for RGB sampling
-        :param binary_alpha: whether to sample alpha as binary
         """
         super().__init__()
         self.shape = shape
         self.std = std
-        self.binary_alpha = binary_alpha
 
         self.dummy = nn.Buffer(torch.zeros(1))  # Will automatically be moved when self.to(...) is called
-
-        if self.binary_alpha and self.shape[0] < 4:
-            raise ValueError("binary_alpha=True requires at least 4 channels (RGBA).")
 
     def sample(self, num_samples: int, **kwargs) -> torch.Tensor:
         device = self.dummy.device
         C, H, W = self.shape
-
-        if self.binary_alpha and C >= 4:
-            rgb = self.std * torch.randn(num_samples, C - 1, H, W, device=device)
-            alpha = torch.randint(0, 2, (num_samples, 1, H, W), device=device).float()
-            return torch.cat([rgb, alpha], dim=1)
-        else:
-            return self.std * torch.randn(num_samples, C, H, W, device=device)
+        return self.std * torch.randn(num_samples, C, H, W, device=device)
 
 
 class PixelArtSampler(nn.Module, IterableSampleable):

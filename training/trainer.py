@@ -96,6 +96,7 @@ class Trainer(ABC):
 
         start_epoch = 0
         best_val_metric = float("inf")
+        last_val_metric = "NA"
 
         # Optionally load from checkpoints
         if resume and os.path.exists(self.checkpoint_path):
@@ -118,14 +119,18 @@ class Trainer(ABC):
             opt.step()
             scheduler.step()
 
-            log = {"train_loss": f"{train_loss.item():.4f}"}
+            log = {
+                "train_loss": f"{train_loss.item():.4f}",
+                "val_metric": last_val_metric
+            }
 
             if validate_every > 0 and (epoch + 1) % validate_every == 0:
                 self.model.eval()
                 with torch.no_grad():
                     val_metric = self.evaluate(batch_size=batch_size, mode='val', device=device, **kwargs)
                     val_metric_value = val_metric.item()
-                    log["val_metric"] = f"{val_metric_value:.4f}"
+                    last_val_metric = f"{val_metric_value:.4f}"
+                    log["val_metric"] = last_val_metric
 
                 # Save if best
                 if val_metric_value < best_val_metric:
@@ -211,6 +216,10 @@ class UnguidedTrainer(Trainer):
             fid = self.eval_metric.evaluate(real_batch, generated, device)
             total_fid += fid
             num_batches += 1
+
+            # To save compute during training only validate the first batch
+            if mode == 'val':
+                break
 
         if num_batches > 0:
             avg_fid = total_fid / num_batches
