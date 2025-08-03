@@ -10,3 +10,6 @@
 
 # Data
 dataset/images
+
+# Experiment checkpoints and stuff
+training/experiments

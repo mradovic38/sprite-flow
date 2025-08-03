@@ -17,7 +17,7 @@ class ImageOnlyDataset(Dataset):
         self.transform = transforms.Compose([
             transforms.Resize((128, 128)),
             transforms.ToTensor(),
-            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+            transforms.Normalize((0.5, 0.5, 0.5, 0.5), (0.5, 0.5, 0.5, 0.5)),
         ])
 
     def __len__(self):
@@ -25,5 +25,5 @@ class ImageOnlyDataset(Dataset):
 
     def __getitem__(self, idx):
         img_path = self.image_paths[idx]
-        image = Image.open(img_path).convert('RGB')
+        image = Image.open(img_path).convert('RGBA')
         return self.transform(image)

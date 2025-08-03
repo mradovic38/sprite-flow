@@ -1,4 +1,10 @@
+import torch
 from torch import nn
+from torchvision.transforms.functional import to_pil_image
+import torch.nn.functional as F
+from PIL import Image
+import numpy as np
+from scipy.linalg import sqrtm
 
 
 MiB = 1024 ** 2
@@ -15,3 +21,46 @@ def model_size_b(model: nn.Module) -> int:
     for buf in model.buffers():
         size += buf.nelement() * buf.element_size()
     return size
+
+
+def tensor_to_rgba_image(tensor: torch.Tensor) -> Image.Image:
+    """
+    Converts a (4, H, W) tensor to a transparent PNG image. Assumes 4 channels: R, G, B, A in [0, 1] range.
+    :param tensor: tensor to convert
+    :return: PNG image (RGBA)
+    """
+    tensor = tensor.detach().cpu().clamp(0, 1)
+    if tensor.shape[0] == 1:  # grayscale, replicate to RGB
+        tensor = tensor.expand(4, -1, -1)
+    elif tensor.shape[0] == 3:  # no alpha, add full alpha
+        alpha = torch.ones(1, *tensor.shape[1:])
+        tensor = torch.cat((tensor, alpha), dim=0)
+    elif tensor.shape[0] != 4:
+        raise ValueError("Expected tensor with 1, 3, or 4 channels")
+
+    return to_pil_image(tensor, mode='RGBA')
+
+
+def rgba_to_rgb(images: torch.Tensor) -> torch.Tensor:
+    """
+    Converts RGBA images to RGB color space.
+    :param images: tensor with RGBA images, shape (num_images, 4, H, W)
+    :return: RGB tensor with shape (num_images, 3, H, W)
+    """
+    # images: (N, 4, H, W), values assumed in [-1, 1] or [0, 1]
+    rgb = images[:, :3]  # take first 3 channels
+
+    alpha = images[:, 3:4]  # alpha channel, shape (N,1,H,W)
+    # Blend with white background: rgb * alpha + (1-alpha)*white(=1)
+    rgb = rgb * alpha + (1 - alpha) * 1.0
+    return rgb
+
+
+def resize_images(images: torch.Tensor, size=(299,299)) -> torch.Tensor:
+    """
+    Resizes images to given size.
+    :param images: tensor of images, shape (num_images, C, H, W)
+    :param size: desired output image dimensions
+    :return: resized tensor of images, shape (num_images, C, new_H, new_W)
+    """
+    return F.interpolate(images, size=size, mode='bilinear', align_corners=False)
