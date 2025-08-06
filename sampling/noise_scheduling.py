@@ -125,7 +125,7 @@ class CosineAlpha(Alpha):
 
     def _calculate_f(self, t: torch.Tensor) -> torch.Tensor:
         """
-        Calculate f(t) = cos^2((t/num_timesteps + s)/(1 + s) * pi/2)
+        Calculate f(t) = cos^2((t + s)/(1 + s) * pi/2)
         :param t: current timestep
         :return: f(t)
         """
@@ -134,7 +134,7 @@ class CosineAlpha(Alpha):
 
     def __call__(self, t: torch.Tensor) -> torch.Tensor:
         """
-        Compute alpha-bar(t) = f(t) / f(0) where f(t) = cos^2((t/num_timesteps + s)/(1 + s) * pi/2)
+        Compute alpha-bar(t) = f(t) / f(0) where f(t) = cos^2((t + s)/(1 + s) * pi/2)
         """
         f_t = self._calculate_f(t)
         return f_t / self._f_0
