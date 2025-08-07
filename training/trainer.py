@@ -97,6 +97,7 @@ class Trainer(ABC):
         start_epoch = 0
         best_val_metric = float("inf")
         last_val_metric = "NA"
+        last_best_val_metric="NA (epoch NA)"
 
         # Optionally load from checkpoints
         if resume and os.path.exists(self.checkpoint_path):
@@ -121,7 +122,8 @@ class Trainer(ABC):
 
             log = {
                 "train_loss": f"{train_loss.item():.4f}",
-                "val_metric": last_val_metric
+                "val_metric": last_val_metric,
+                "best_val_metric": last_best_val_metric
             }
 
             if validate_every > 0 and (epoch + 1) % validate_every == 0:
@@ -135,6 +137,7 @@ class Trainer(ABC):
                 # Save if best
                 if val_metric_value < best_val_metric:
                     best_val_metric = val_metric_value
+                    log["best_val_metric"] = f"{best_val_metric:.4f} (epoch {epoch})"
                     torch.save({
                         "epoch": epoch,
                         "model_state": self.model.state_dict(),
@@ -147,7 +150,7 @@ class Trainer(ABC):
             if save_images_every > 0 and (epoch + 1) % save_images_every == 0:
                 self.model.eval()
                 with torch.no_grad():
-                    self.save_images(num_images_to_save, epoch + 1, device)
+                    self.save_images(num_images_to_save, epoch, device)
                 self.model.train()
 
             pbar.set_postfix(log)
@@ -248,4 +251,4 @@ class UnguidedTrainer(Trainer):
         for i in range(num_images_to_save):
             img_tensor = generated[i]
             img = tensor_to_rgba_image(img_tensor)  # Expects a tensor in [-1, 1] or [0, 1], shape (4, H, W)
-            img.save(os.path.join(output_dir, f"image_{i + 1}.png"))
+            img.save(os.path.join(output_dir, f"image_{i}.png"))
