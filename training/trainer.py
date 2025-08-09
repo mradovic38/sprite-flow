@@ -137,7 +137,8 @@ class Trainer(ABC):
                 # Save if best
                 if val_metric_value < best_val_metric:
                     best_val_metric = val_metric_value
-                    log["best_val_metric"] = f"{best_val_metric:.4f} (epoch {epoch})"
+                    last_best_val_metric = f"{best_val_metric:.4f} (epoch {epoch})"
+                    log["best_val_metric"] = last_best_val_metric
                     torch.save({
                         "epoch": epoch,
                         "model_state": self.model.state_dict(),
