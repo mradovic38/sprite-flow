@@ -8,7 +8,7 @@ from tqdm import tqdm
 import os
 import csv
 
-from helpers import model_size_b, MiB, tensor_to_rgba_image
+from utils.helpers import model_size_b, MiB, tensor_to_rgba_image
 from sampling.conditional_probability_path import GaussianConditionalProbabilityPath
 from lr_scheduling import CosineWarmupScheduler
 from sampling.sampleable import IterableSampleable
@@ -166,7 +166,11 @@ class Trainer(ABC):
             # Log to CSV
             with open(self.log_path, mode="a", newline="") as f:
                 writer = csv.writer(f)
-                writer.writerow([epoch, train_loss.item(), val_metric.item()])
+                writer.writerow([
+                    epoch,
+                    train_loss.item(),
+                    val_metric.item() if isinstance(val_metric, torch.Tensor) else "NA" # val_metric may not exist yet
+                ])
 
             pbar.set_postfix(log)
 
