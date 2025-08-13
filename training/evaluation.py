@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 import torch
 from torchmetrics.image.fid import FrechetInceptionDistance
 
-from helpers import rgba_to_rgb, resize_images
+from utils.helpers import rgba_to_rgb, resize_images
 
 
 class EvaluationMetric(ABC):
