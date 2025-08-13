@@ -6,6 +6,7 @@ from torch import nn
 from torch.nn.utils import clip_grad_norm_
 from tqdm import tqdm
 import os
+import csv
 
 from helpers import model_size_b, MiB, tensor_to_rgba_image
 from sampling.conditional_probability_path import GaussianConditionalProbabilityPath
@@ -23,6 +24,7 @@ class Trainer(ABC):
         self.model = model
         self.experiment_dir = experiment_dir
         self.checkpoint_path = os.path.join(experiment_dir, 'best_model.pt')
+        self.log_path = os.path.join(experiment_dir, 'training_log.csv')
         self.eval_metric = eval_metric
 
     @abstractmethod
@@ -99,6 +101,12 @@ class Trainer(ABC):
         last_val_metric = "NA"
         last_best_val_metric="NA (epoch NA)"
 
+        # If first run, create CSV header
+        if not resume or not os.path.exists(self.log_path):
+            with open(self.log_path, mode="w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(["epoch", "train_loss", "val_metric"])
+
         # Optionally load from checkpoints
         if resume and os.path.exists(self.checkpoint_path):
             checkpoint = torch.load(self.checkpoint_path, map_location=device)
@@ -148,15 +156,20 @@ class Trainer(ABC):
 
                 self.model.train()
 
+            # Save images
             if save_images_every > 0 and (epoch + 1) % save_images_every == 0:
                 self.model.eval()
                 with torch.no_grad():
                     self.save_images(num_images_to_save, epoch, device)
                 self.model.train()
 
+            # Log to CSV
+            with open(self.log_path, mode="a", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow([epoch, train_loss.item(), val_metric.item()])
+
             pbar.set_postfix(log)
 
-        # Final eval
         self.model.eval()
 
 class UnguidedTrainer(Trainer):
