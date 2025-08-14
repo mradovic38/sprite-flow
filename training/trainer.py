@@ -10,9 +10,9 @@ import csv
 
 from utils.helpers import model_size_b, MiB, tensor_to_rgba_image
 from sampling.conditional_probability_path import GaussianConditionalProbabilityPath
-from lr_scheduling import CosineWarmupScheduler
+from .lr_scheduling import CosineWarmupScheduler
 from sampling.sampleable import IterableSampleable
-from evaluation import EvaluationMetric
+from .evaluation import EvaluationMetric
 from diff_eq.ode_sde import UnguidedVectorFieldODE
 from diff_eq.simulator import EulerSimulator
 from training.objective import ConditionalVectorField
@@ -139,8 +139,8 @@ class Trainer(ABC):
                 with torch.no_grad():
                     val_metric = self.evaluate(batch_size=batch_size, mode='val', device=device, **kwargs)
                     val_metric_value = val_metric.item()
-                    last_val_metric = f"{val_metric_value:.4f}"
-                    log["val_metric"] = last_val_metric
+                    last_val_metric = val_metric_value
+                    log["val_metric"] = f"{last_val_metric:.4f}"
 
                 # Save if best
                 if val_metric_value < best_val_metric:
@@ -169,7 +169,7 @@ class Trainer(ABC):
                 writer.writerow([
                     epoch,
                     train_loss.item(),
-                    val_metric.item() if isinstance(val_metric, torch.Tensor) else "NA" # val_metric may not exist yet
+                    last_val_metric
                 ])
 
             pbar.set_postfix(log)
