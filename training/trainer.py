@@ -6,15 +6,16 @@ from torch import nn
 from torch.nn.utils import clip_grad_norm_
 from tqdm import tqdm
 import os
+import csv
 
-from helpers import model_size_b, MiB, tensor_to_rgba_image
 from sampling.conditional_probability_path import GaussianConditionalProbabilityPath
-from lr_scheduling import CosineWarmupScheduler
 from sampling.sampleable import IterableSampleable
-from evaluation import EvaluationMetric
+from training.objective import ConditionalVectorField
+from training.evaluation import EvaluationMetric
+from training.lr_scheduling import CosineWarmupScheduler
 from diff_eq.ode_sde import UnguidedVectorFieldODE
 from diff_eq.simulator import EulerSimulator
-from training.objective import ConditionalVectorField
+from utils.helpers import model_size_b, MiB, tensor_to_rgba_image
 
 
 class Trainer(ABC):
@@ -23,6 +24,7 @@ class Trainer(ABC):
         self.model = model
         self.experiment_dir = experiment_dir
         self.checkpoint_path = os.path.join(experiment_dir, 'best_model.pt')
+        self.log_path = os.path.join(experiment_dir, 'training_log.csv')
         self.eval_metric = eval_metric
 
     @abstractmethod
@@ -96,6 +98,14 @@ class Trainer(ABC):
 
         start_epoch = 0
         best_val_metric = float("inf")
+        last_val_metric = "NA"
+        last_best_val_metric="NA (epoch NA)"
+
+        # If first run, create CSV header
+        if not resume or not os.path.exists(self.log_path):
+            with open(self.log_path, mode="w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(["epoch", "train_loss", "val_metric"])
 
         # Optionally load from checkpoints
         if resume and os.path.exists(self.checkpoint_path):
@@ -118,18 +128,25 @@ class Trainer(ABC):
             opt.step()
             scheduler.step()
 
-            log = {"train_loss": f"{train_loss.item():.4f}"}
+            log = {
+                "train_loss": f"{train_loss.item():.4f}",
+                "val_metric": last_val_metric,
+                "best_val_metric": last_best_val_metric
+            }
 
             if validate_every > 0 and (epoch + 1) % validate_every == 0:
                 self.model.eval()
                 with torch.no_grad():
                     val_metric = self.evaluate(batch_size=batch_size, mode='val', device=device, **kwargs)
                     val_metric_value = val_metric.item()
-                    log["val_metric"] = f"{val_metric_value:.4f}"
+                    last_val_metric = val_metric_value
+                    log["val_metric"] = f"{last_val_metric:.4f}"
 
                 # Save if best
                 if val_metric_value < best_val_metric:
                     best_val_metric = val_metric_value
+                    last_best_val_metric = f"{best_val_metric:.4f} (epoch {epoch})"
+                    log["best_val_metric"] = last_best_val_metric
                     torch.save({
                         "epoch": epoch,
                         "model_state": self.model.state_dict(),
@@ -139,15 +156,24 @@ class Trainer(ABC):
 
                 self.model.train()
 
+            # Save images
             if save_images_every > 0 and (epoch + 1) % save_images_every == 0:
                 self.model.eval()
                 with torch.no_grad():
-                    self.save_images(num_images_to_save, epoch + 1, device)
+                    self.save_images(num_images_to_save, epoch, device)
                 self.model.train()
+
+            # Log to CSV
+            with open(self.log_path, mode="a", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow([
+                    epoch,
+                    train_loss.item(),
+                    last_val_metric
+                ])
 
             pbar.set_postfix(log)
 
-        # Final eval
         self.model.eval()
 
 class UnguidedTrainer(Trainer):
@@ -212,6 +238,10 @@ class UnguidedTrainer(Trainer):
             total_fid += fid
             num_batches += 1
 
+            # To save compute during training only validate the first batch
+            if mode == 'val':
+                break
+
         if num_batches > 0:
             avg_fid = total_fid / num_batches
         else:
@@ -239,4 +269,4 @@ class UnguidedTrainer(Trainer):
         for i in range(num_images_to_save):
             img_tensor = generated[i]
             img = tensor_to_rgba_image(img_tensor)  # Expects a tensor in [-1, 1] or [0, 1], shape (4, H, W)
-            img.save(os.path.join(output_dir, f"image_{i + 1}.png"))
+            img.save(os.path.join(output_dir, f"image_{i}.png"))

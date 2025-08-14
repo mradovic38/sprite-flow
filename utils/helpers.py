@@ -3,8 +3,6 @@ from torch import nn
 from torchvision.transforms.functional import to_pil_image
 import torch.nn.functional as F
 from PIL import Image
-import numpy as np
-from scipy.linalg import sqrtm
 
 
 MiB = 1024 ** 2
