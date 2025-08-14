@@ -9,16 +9,10 @@ import os
 import csv
 
 from sampling.conditional_probability_path import GaussianConditionalProbabilityPath
-<<<<<<< HEAD
-from .lr_scheduling import CosineWarmupScheduler
-from sampling.sampleable import IterableSampleable
-from .evaluation import EvaluationMetric
-=======
 from sampling.sampleable import IterableSampleable
 from training.objective import ConditionalVectorField
 from training.evaluation import EvaluationMetric
 from training.lr_scheduling import CosineWarmupScheduler
->>>>>>> a29ac6664236e3201cc6d6b0e9e88aded6fdf629
 from diff_eq.ode_sde import UnguidedVectorFieldODE
 from diff_eq.simulator import EulerSimulator
 from utils.helpers import model_size_b, MiB, tensor_to_rgba_image
