@@ -160,7 +160,7 @@ class CosineBeta(Beta):
 
     def __call__(self, t: torch.Tensor) -> torch.Tensor:
         """
-        β_t = 1 - alpha-bar(t) / alpha-bar(t - dt)
+        beta_t = 1 - alpha-bar(t) / alpha-bar(t - dt)
         """
         t_prev = torch.clamp(t - self.dt, min=0.0)
         alpha_t = self.alpha(t)
