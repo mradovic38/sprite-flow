@@ -4,7 +4,7 @@ import torch
 from torch import nn
 import math
 
-from training.objective import ConditionalVectorField
+from models.conditional_vector_field import ConditionalVectorField
 
 
 class FourierEncoder(nn.Module):

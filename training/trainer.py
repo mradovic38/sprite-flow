@@ -10,7 +10,7 @@ import csv
 
 from sampling.conditional_probability_path import GaussianConditionalProbabilityPath
 from sampling.sampleable import IterableSampleable
-from training.objective import ConditionalVectorField
+from models.conditional_vector_field import ConditionalVectorField
 from training.evaluation import EvaluationMetric
 from training.lr_scheduling import CosineWarmupScheduler
 from diff_eq.ode_sde import UnguidedVectorFieldODE
