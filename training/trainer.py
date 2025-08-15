@@ -210,9 +210,11 @@ class UnguidedTrainer(Trainer):
     def _compute_loss(self, batch_size: int, mode: str = 'train') -> torch.Tensor:
         # Generate predictions
         ut_theta, z, x, t = self.generate_predictions(num_images=batch_size, mode=mode)
+        
         # Calculate and return loss
         ut_ref = self.path.conditional_vector_field(x, z, t)  # (batch_size, 4, 128, 128)
-        return torch.mean(torch.sum(torch.square(ut_theta - ut_ref), dim=-1))
+        loss = torch.mean((ut_theta - ut_ref) ** 2)
+        return loss
 
     def evaluate(self, batch_size: int, device: torch.device, num_timesteps: int = 100, mode: str = 'val') -> torch.Tensor:
         #  TODO: implement cleaner solution
