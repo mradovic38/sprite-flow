@@ -10,7 +10,7 @@ import csv
 
 from sampling.conditional_probability_path import GaussianConditionalProbabilityPath
 from sampling.sampleable import IterableSampleable
-from training.objective import ConditionalVectorField
+from models.conditional_vector_field import ConditionalVectorField
 from training.evaluation import EvaluationMetric
 from training.lr_scheduling import CosineWarmupScheduler
 from diff_eq.ode_sde import UnguidedVectorFieldODE
@@ -59,8 +59,11 @@ class Trainer(ABC):
         """
         pass
 
-    def get_optimizer(self, lr: float):
-        return torch.optim.Adam(self.model.parameters(), lr=lr)
+    def get_optimizer(self, lr: float, weight_decay: float = 0):
+        if weight_decay > 0:
+            return torch.optim.Adam(self.model.parameters(), lr=lr)
+        else:
+            return torch.optim.AdamW(self.model.parameters(), lr=lr, weight_decay=weight_decay)
 
     def train(
             self,
@@ -68,6 +71,7 @@ class Trainer(ABC):
             num_epochs: int,
             batch_size: int = 128,
             lr: float = 1e-3,
+            weight_decay: float = 0,
             validate_every: int = 1,
             resume: bool = False,
             lr_warmup_steps_frac: float = 0.1,
@@ -81,6 +85,7 @@ class Trainer(ABC):
         :param num_epochs: total number of training epochs
         :param batch_size
         :param lr: learning rate
+        :param weight_decay: Weight decay - if 0, uses Adam, if >0 uses AdamW as optimizer
         :param validate_every: validation frequency (number of epochs)
         :param resume: whether to resume training or to start over, overwriting the checkpoint file
         :param lr_warmup_steps_frac: learning rate warmup steps - fraction of the total training steps
@@ -92,7 +97,7 @@ class Trainer(ABC):
         print(f'Model size: {size_b / MiB:.4f} MiB')
 
         self.model.to(device)
-        opt = self.get_optimizer(lr)
+        opt = self.get_optimizer(lr, weight_decay)
         warmup_steps = lr_warmup_steps_frac * num_epochs
         scheduler = CosineWarmupScheduler(optimizer=opt, num_warmup_steps=warmup_steps, num_training_steps=num_epochs)
 
@@ -210,9 +215,11 @@ class UnguidedTrainer(Trainer):
     def _compute_loss(self, batch_size: int, mode: str = 'train') -> torch.Tensor:
         # Generate predictions
         ut_theta, z, x, t = self.generate_predictions(num_images=batch_size, mode=mode)
+        
         # Calculate and return loss
         ut_ref = self.path.conditional_vector_field(x, z, t)  # (batch_size, 4, 128, 128)
-        return torch.mean(torch.sum(torch.square(ut_theta - ut_ref), dim=-1))
+        loss = torch.mean((ut_theta - ut_ref) ** 2)
+        return loss
 
     def evaluate(self, batch_size: int, device: torch.device, num_timesteps: int = 100, mode: str = 'val') -> torch.Tensor:
         #  TODO: implement cleaner solution
