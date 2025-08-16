@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 
 import torch
 
-from training.objective import ConditionalVectorField
+from models.conditional_vector_field import ConditionalVectorField
 
 
 class ODE(ABC):
