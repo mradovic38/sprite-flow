@@ -73,6 +73,7 @@ class Trainer(ABC):
             lr: float = 1e-3,
             weight_decay: float = 0,
             validate_every: int = 1,
+            val_timesteps: int = 100,
             resume: bool = False,
             lr_warmup_steps_frac: float = 0.1,
             num_images_to_save: int = 5,
@@ -87,6 +88,7 @@ class Trainer(ABC):
         :param lr: learning rate
         :param weight_decay: Weight decay - if 0, uses Adam, if >0 uses AdamW as optimizer
         :param validate_every: validation frequency (number of epochs)
+        :param val_timesteps: number of denoising timesteps for validation
         :param resume: whether to resume training or to start over, overwriting the checkpoint file
         :param lr_warmup_steps_frac: learning rate warmup steps - fraction of the total training steps
         :param num_images_to_save: number of images to save for manual evaluation
@@ -165,7 +167,7 @@ class Trainer(ABC):
             if save_images_every > 0 and (epoch + 1) % save_images_every == 0:
                 self.model.eval()
                 with torch.no_grad():
-                    self.save_images(num_images_to_save, epoch, device)
+                    self.save_images(num_images_to_save, epoch, device, val_timesteps)
                 self.model.train()
 
             # Log to CSV
