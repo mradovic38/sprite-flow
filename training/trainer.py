@@ -224,38 +224,31 @@ class UnguidedTrainer(Trainer):
         return loss
 
     def evaluate(self, batch_size: int, device: torch.device, num_timesteps: int = 100, mode: str = 'val') -> torch.Tensor:
-        #  TODO: implement cleaner solution
         assert isinstance(self.path.p_data, IterableSampleable) and isinstance(self.model, ConditionalVectorField)
 
         ode = UnguidedVectorFieldODE(self.model)
         simulator = EulerSimulator(ode)
-        total_fid = torch.tensor(0.0, device=device)
-        num_batches = 0
+
+        self.eval_metric.prepare(device)
 
         # Loop over validation/test dataset
         for real_batch in self.path.p_data.iterate_dataset(batch_size, mode=mode):
-            real_batch = real_batch.to(device)  # (B, 4, 128, 128)
+            B = real_batch.shape[0]
+            real_batch = real_batch.to(device)  # (B, 4, H, W)
 
             # Generate matching number of fake images
-            B = real_batch.shape[0]
-            ts = torch.linspace(0, 1, steps=num_timesteps).view(1, -1, 1, 1, 1).expand(B, -1, 1, 1, 1).to(device)
-            x0 = self.path.p_simple.sample(B).to(device)  # prior sample (B, 4, 128, 128)
-            generated = simulator.simulate(x0, ts)[:, :4]  # match RGBA shape
+            ts = torch.linspace(0, 1, steps=num_timesteps, device=device).view(1, -1, 1, 1, 1).expand(B, -1, 1, 1, 1)
+            x0 = self.path.p_simple.sample(B).to(device)  # (B, 4, H, W)
+            generated = simulator.simulate(x0, ts)[:, :4]  # RGBA
 
-            # Compute FID for this batch
-            fid = self.eval_metric.evaluate(real_batch, generated, device)
-            total_fid += fid
-            num_batches += 1
+            # Update FID
+            self.eval_metric.evaluate_batch(real_batch, generated, device)
 
-            # To save compute during training only validate the first batch
+            # For training validation, only first batch
             if mode == 'val':
                 break
 
-        if num_batches > 0:
-            avg_fid = total_fid / num_batches
-        else:
-            avg_fid = torch.tensor(float("nan"), device=device)
-        return avg_fid
+        return self.eval_metric.compute()
 
     def save_images(self, num_images_to_save: int, epoch: int, device: torch.device, num_timesteps: int = 100) -> None:
         assert isinstance(self.path.p_data, IterableSampleable) and isinstance(self.model, ConditionalVectorField)

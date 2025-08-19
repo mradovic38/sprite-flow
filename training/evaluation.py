@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 import torch
 from torchmetrics.image.fid import FrechetInceptionDistance
 
-from utils.helpers import rgba_to_rgb, resize_images
+from utils.helpers import rgba_to_rgb, resize_images, normalize_to_unit
 
 
 class EvaluationMetric(ABC):
@@ -11,13 +11,28 @@ class EvaluationMetric(ABC):
     Abstract class for evaluation metrics.
     """
     @abstractmethod
-    def evaluate(self, real_data: torch.Tensor, generated_data: torch.Tensor,  device: torch.device) -> torch.Tensor:
+    def evaluate_batch(self, real_data: torch.Tensor, generated_data: torch.Tensor,  device: torch.device):
         """
-        Evaluates generated data over the metric.
+        Evaluates a batch of generated data and updates the evaluation metric.
         :param real_data:
         :param generated_data:
         :param device: device to perform computation on
-        :return: evaluation score
+        """
+        pass
+
+    @abstractmethod
+    def compute(self) -> torch.Tensor:
+        """
+        Computes the total evaluation metric.
+        :return: evaluation metric over all the generated data
+        """
+        pass
+
+    @abstractmethod
+    def prepare(self, device: torch.device) -> None:
+        """
+        Prepare metric for evaluation.
+        :param device: Device to perform computation on
         """
         pass
 
@@ -29,17 +44,25 @@ class FID(EvaluationMetric):
         self.image_size = image_size
 
     def _process_images(self, images: torch.Tensor) -> torch.Tensor:
-        rgb = rgba_to_rgb(images)
-        rgb = resize_images(rgb, self.image_size)  # Ensure this returns float in [0, 1]
+        images = normalize_to_unit(images)
+        rgb = rgba_to_rgb(images)  # convert RGBA -> RGB
+        rgb = resize_images(rgb, self.image_size)  # return float32 [0,1]
         return rgb
 
-    def evaluate(self, real_data: torch.Tensor, generated_data: torch.Tensor, device: torch.device) -> torch.Tensor:
+    def evaluate_batch(self, real_data: torch.Tensor, generated_data: torch.Tensor, device: torch.device) -> torch.Tensor:
         real = self._process_images(real_data).to(device)
         fake = self._process_images(generated_data).to(device)
 
-        self.metric = self.metric.to(device)
-        self.metric.reset()
         self.metric.update(real, real=True)
         self.metric.update(fake, real=False)
 
-        return self.metric.compute()
+    def compute(self) -> torch.Tensor:
+        score = self.metric.compute()
+        self.metric.reset()
+        return score
+
+    def prepare(self, device) -> None:
+        self.metric.to(device)
+        self.metric.reset()
+
+

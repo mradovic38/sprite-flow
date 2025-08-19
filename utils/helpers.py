@@ -70,3 +70,13 @@ def resize_images(images: torch.Tensor, size=(299,299)) -> torch.Tensor:
     :return: resized tensor of images, shape (num_images, C, new_H, new_W)
     """
     return F.interpolate(images, size=size, mode='bilinear', align_corners=False)
+
+
+def normalize_to_unit(images: torch.Tensor) -> torch.Tensor:
+    """
+    Normalizes images from [-1, 1] to [0, 1] range.
+    :param images: images to normalize
+    :return: normalized images
+    """
+    # [-1,1] -> [0,1]
+    return ((images + 1) / 2).clamp(0, 1)
