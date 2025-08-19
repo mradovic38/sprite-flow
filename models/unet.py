@@ -1,6 +1,7 @@
 from typing import List
 
 import torch
+import torch.nn.functional as F
 from torch import nn
 import math
 
@@ -97,11 +98,12 @@ class Encoder(nn.Module):
 
 
 class Midcoder(nn.Module):
-    def __init__(self, channels: int, num_residual_layers: int, t_embed_dim: int):
+    def __init__(self, channels: int, num_residual_layers: int, t_embed_dim: int, dropout_p: float = 0):
         super().__init__()
         self.res_blocks = nn.ModuleList([
             ResidualLayer(channels, t_embed_dim) for _ in range(num_residual_layers)
         ])
+        self.dropout_p = dropout_p
 
     def forward(self, x: torch.Tensor, t_embed: torch.Tensor) -> torch.Tensor:
         """
@@ -111,6 +113,7 @@ class Midcoder(nn.Module):
         # Pass through residual blocks: (bs, c, h, w) -> (bs, c, h, w)
         for block in self.res_blocks:
             x = block(x, t_embed)
+            x = F.dropout2d(x, p=self.dropout_p, training=True)
 
         return x
 
@@ -142,7 +145,7 @@ class Decoder(nn.Module):
 
 
 class PixelArtUNet(ConditionalVectorField):
-    def __init__(self, channels: List[int], num_residual_layers: int, t_embed_dim: int):
+    def __init__(self, channels: List[int], num_residual_layers: int, t_embed_dim: int, midcoder_dropout_p: float = 0):
         super().__init__()
         # Initial convolution: (bs, 4, 128, 128) -> (bs, c_0, 128, 128)
         self.init_conv = nn.Sequential(
@@ -163,7 +166,7 @@ class PixelArtUNet(ConditionalVectorField):
         self.encoders = nn.ModuleList(encoders)
         self.decoders = nn.ModuleList(reversed(decoders))
 
-        self.midcoder = Midcoder(channels[-1], num_residual_layers, t_embed_dim)
+        self.midcoder = Midcoder(channels[-1], num_residual_layers, t_embed_dim, dropout_p=midcoder_dropout_p)
 
         # Final convolution
         self.final_conv = nn.Conv2d(channels[0], 4, kernel_size=3, padding=1)

@@ -59,8 +59,11 @@ class Trainer(ABC):
         """
         pass
 
-    def get_optimizer(self, lr: float):
-        return torch.optim.Adam(self.model.parameters(), lr=lr)
+    def get_optimizer(self, lr: float, weight_decay: float = 0):
+        if weight_decay > 0:
+            return torch.optim.Adam(self.model.parameters(), lr=lr)
+        else:
+            return torch.optim.AdamW(self.model.parameters(), lr=lr, weight_decay=weight_decay)
 
     def train(
             self,
@@ -68,7 +71,9 @@ class Trainer(ABC):
             num_epochs: int,
             batch_size: int = 128,
             lr: float = 1e-3,
+            weight_decay: float = 0,
             validate_every: int = 1,
+            val_timesteps: int = 100,
             resume: bool = False,
             lr_warmup_steps_frac: float = 0.1,
             num_images_to_save: int = 5,
@@ -81,7 +86,9 @@ class Trainer(ABC):
         :param num_epochs: total number of training epochs
         :param batch_size
         :param lr: learning rate
+        :param weight_decay: Weight decay - if 0, uses Adam, if >0 uses AdamW as optimizer
         :param validate_every: validation frequency (number of epochs)
+        :param val_timesteps: number of denoising timesteps for validation
         :param resume: whether to resume training or to start over, overwriting the checkpoint file
         :param lr_warmup_steps_frac: learning rate warmup steps - fraction of the total training steps
         :param num_images_to_save: number of images to save for manual evaluation
@@ -92,7 +99,7 @@ class Trainer(ABC):
         print(f'Model size: {size_b / MiB:.4f} MiB')
 
         self.model.to(device)
-        opt = self.get_optimizer(lr)
+        opt = self.get_optimizer(lr, weight_decay)
         warmup_steps = lr_warmup_steps_frac * num_epochs
         scheduler = CosineWarmupScheduler(optimizer=opt, num_warmup_steps=warmup_steps, num_training_steps=num_epochs)
 
@@ -160,7 +167,7 @@ class Trainer(ABC):
             if save_images_every > 0 and (epoch + 1) % save_images_every == 0:
                 self.model.eval()
                 with torch.no_grad():
-                    self.save_images(num_images_to_save, epoch, device)
+                    self.save_images(num_images_to_save, epoch, device, val_timesteps)
                 self.model.train()
 
             # Log to CSV
