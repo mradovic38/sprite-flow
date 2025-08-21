@@ -13,5 +13,6 @@ dataset/images
 
 # Experiment checkpoints and stuff
 *.pt
+*.pth
 training/experiments/**/*.csv
 training/experiments/**/*.png
