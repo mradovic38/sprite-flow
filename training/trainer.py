@@ -13,19 +13,33 @@ from sampling.sampleable import IterableSampleable
 from models.conditional_vector_field import ConditionalVectorField
 from training.evaluation import EvaluationMetric
 from training.lr_scheduling import CosineWarmupScheduler
+from training.ema import EMA
 from diff_eq.ode_sde import UnguidedVectorFieldODE
 from diff_eq.simulator import EulerSimulator
 from utils.helpers import model_size_b, MiB, tensor_to_rgba_image
 
 
 class Trainer(ABC):
-    def __init__(self, model: nn.Module, eval_metric: EvaluationMetric, experiment_dir: str = "model") -> None:
+    def __init__(
+            self,
+            model: nn.Module,
+            eval_metric: EvaluationMetric,
+            experiment_dir: str = "model",
+            ema_decay: float = 1
+    ) -> None:
+        """
+        :param model: pytorch model
+        :param eval_metric: evaluation metric to be used
+        :param experiment_dir: path to experiment directory
+        :param ema_decay: EMA decay factor
+        """
         super().__init__()
         self.model = model
         self.experiment_dir = experiment_dir
         self.checkpoint_path = os.path.join(experiment_dir, 'best_model.pt')
         self.log_path = os.path.join(experiment_dir, 'training_log.csv')
         self.eval_metric = eval_metric
+        self.ema = EMA(self.model, ema_decay)
 
     @abstractmethod
     def get_train_loss(self, **kwargs) -> torch.Tensor:
@@ -134,6 +148,7 @@ class Trainer(ABC):
             clip_grad_norm_(self.model.parameters(), max_norm=1.0)
             opt.step()
             scheduler.step()
+            self.ema.update()
 
             log = {
                 "train_loss": f"{train_loss.item():.4f}",
@@ -189,9 +204,10 @@ class UnguidedTrainer(Trainer):
             path: GaussianConditionalProbabilityPath,
             model: nn.Module,
             eval_metric: EvaluationMetric,
-            experiment_dir: str = 'unet'
+            experiment_dir: str = 'unet',
+            ema_decay: float = 1
     ) -> None:
-        super().__init__(model, eval_metric, experiment_dir)
+        super().__init__(model, eval_metric, experiment_dir, ema_decay)
         self.path = path
 
     def get_train_loss(self, batch_size: int) -> torch.Tensor:
@@ -224,6 +240,7 @@ class UnguidedTrainer(Trainer):
         return loss
 
     def evaluate(self, batch_size: int, device: torch.device, num_timesteps: int = 100, mode: str = 'val') -> torch.Tensor:
+        self.ema.apply_shadow()
         assert isinstance(self.path.p_data, IterableSampleable) and isinstance(self.model, ConditionalVectorField)
 
         ode = UnguidedVectorFieldODE(self.model)
@@ -248,6 +265,7 @@ class UnguidedTrainer(Trainer):
             if mode == 'val':
                 break
 
+        self.ema.restore()
         return self.eval_metric.compute()
 
     def save_images(self, num_images_to_save: int, epoch: int, device: torch.device, num_timesteps: int = 100) -> None:
