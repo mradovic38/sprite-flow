@@ -1,12 +1,13 @@
 # SpriteFlow: Flow-based Pixel Art Character Generation
 
-
+<p float="left">
 <img src="assets/unet_mid/image_9.png"  alt="Example generated image"/>
 <img src="assets/unet_mid/image_11.png"  alt="Example generated image"/>
 <img src="assets/unet_mid/image_13.png"  alt="Example generated image"/>
 <img src="assets/unet_mid/image_15.png"  alt="Example generated image"/>
 <img src="assets/unet_mid/image_18.png"  alt="Example generated image"/>
 <img src="assets/unet_mid/image_6.png"  alt="Example generated image"/>
+</p>
 
 A PyTorch implementation of a flow-based generative model for creating pixel 
 art characters. This project uses continuous normalizing flows with a U-Net 
