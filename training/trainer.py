@@ -25,13 +25,13 @@ class Trainer(ABC):
             model: nn.Module,
             eval_metric: EvaluationMetric,
             experiment_dir: str = "model",
-            ema_decay: float = 1
+            ema: EMA = None
     ) -> None:
         """
         :param model: pytorch model
         :param eval_metric: evaluation metric to be used
         :param experiment_dir: path to experiment directory
-        :param ema_decay: EMA decay factor
+        :param ema: EMA instance, defaults to no EMA
         """
         super().__init__()
         self.model = model
@@ -39,7 +39,7 @@ class Trainer(ABC):
         self.checkpoint_path = os.path.join(experiment_dir, 'best_model.pt')
         self.log_path = os.path.join(experiment_dir, 'training_log.csv')
         self.eval_metric = eval_metric
-        self.ema = EMA(self.model, ema_decay)
+        self.ema = ema
 
     @abstractmethod
     def get_train_loss(self, **kwargs) -> torch.Tensor:
@@ -133,8 +133,11 @@ class Trainer(ABC):
             checkpoint = torch.load(self.checkpoint_path, map_location=device)
             self.model.load_state_dict(checkpoint["model_state"])
             opt.load_state_dict(checkpoint["optimizer_state"])
+            scheduler.load_state_dict(checkpoint["scheduler_state"])
             best_val_metric = checkpoint["best_val_metric"]
             start_epoch = checkpoint["epoch"] + 1
+            if self.ema and "ema_state" in checkpoint and checkpoint["ema_state"] is not None:
+                self.ema.load_state_dict(checkpoint["ema_state"])
             print(f"Resumed from checkpoint at epoch {start_epoch}")
 
         # Start training
@@ -148,7 +151,8 @@ class Trainer(ABC):
             clip_grad_norm_(self.model.parameters(), max_norm=1.0)
             opt.step()
             scheduler.step()
-            self.ema.update()
+            if self.ema:
+                self.ema.update()
 
             log = {
                 "train_loss": f"{train_loss.item():.4f}",
@@ -173,7 +177,9 @@ class Trainer(ABC):
                         "epoch": epoch,
                         "model_state": self.model.state_dict(),
                         "optimizer_state": opt.state_dict(),
+                        "scheduler_state": scheduler.state_dict(),
                         "best_val_metric": best_val_metric,
+                        "ema_state": self.ema.state_dict() if self.ema else None,
                     }, self.checkpoint_path)
 
                 self.model.train()
@@ -198,6 +204,7 @@ class Trainer(ABC):
 
         self.model.eval()
 
+
 class UnguidedTrainer(Trainer):
     def __init__(
             self,
@@ -205,9 +212,9 @@ class UnguidedTrainer(Trainer):
             model: nn.Module,
             eval_metric: EvaluationMetric,
             experiment_dir: str = 'unet',
-            ema_decay: float = 1
+            ema: EMA = None
     ) -> None:
-        super().__init__(model, eval_metric, experiment_dir, ema_decay)
+        super().__init__(model, eval_metric, experiment_dir, ema)
         self.path = path
 
     def get_train_loss(self, batch_size: int) -> torch.Tensor:
@@ -233,15 +240,17 @@ class UnguidedTrainer(Trainer):
     def _compute_loss(self, batch_size: int, mode: str = 'train') -> torch.Tensor:
         # Generate predictions
         ut_theta, z, x, t = self.generate_predictions(num_images=batch_size, mode=mode)
-        
+
         # Calculate and return loss
         ut_ref = self.path.conditional_vector_field(x, z, t)  # (batch_size, 4, 128, 128)
         loss = torch.mean((ut_theta - ut_ref) ** 2)
         return loss
 
     def evaluate(self, batch_size: int, device: torch.device, num_timesteps: int = 100, mode: str = 'val') -> torch.Tensor:
-        self.ema.apply_shadow()
         assert isinstance(self.path.p_data, IterableSampleable) and isinstance(self.model, ConditionalVectorField)
+
+        if self.ema:
+            self.ema.apply_shadow()
 
         ode = UnguidedVectorFieldODE(self.model)
         simulator = EulerSimulator(ode)
@@ -265,16 +274,22 @@ class UnguidedTrainer(Trainer):
             if mode == 'val':
                 break
 
-        self.ema.restore()
+        if self.ema:
+            self.ema.restore()
+
         return self.eval_metric.compute()
 
     def save_images(self, num_images_to_save: int, epoch: int, device: torch.device, num_timesteps: int = 100) -> None:
         assert isinstance(self.path.p_data, IterableSampleable) and isinstance(self.model, ConditionalVectorField)
 
-        self.model.eval()
         os.makedirs(self.experiment_dir, exist_ok=True)
         output_dir = os.path.join(self.experiment_dir, f"epoch-{epoch}")
         os.makedirs(output_dir, exist_ok=True)
+
+        self.model.eval()
+
+        if self.ema:
+            self.ema.apply_shadow()
 
         # Create time steps
         ts = torch.linspace(0, 1, steps=num_timesteps).view(1, -1, 1, 1, 1)
@@ -290,3 +305,6 @@ class UnguidedTrainer(Trainer):
             img_tensor = generated[i]
             img = tensor_to_rgba_image(img_tensor)  # Expects a tensor in [-1, 1] or [0, 1], shape (4, H, W)
             img.save(os.path.join(output_dir, f"image_{i}.png"))
+
+        if self.ema:
+            self.ema.restore()
