@@ -1,4 +1,12 @@
-# Pixel Art Character Generation
+# SpriteFlow: Flow-based Pixel Art Character Generation
+
+
+<img src="assets/unet_mid/image_9.png"  alt="Example generated image"/>
+<img src="assets/unet_mid/image_11.png"  alt="Example generated image"/>
+<img src="assets/unet_mid/image_13.png"  alt="Example generated image"/>
+<img src="assets/unet_mid/image_15.png"  alt="Example generated image"/>
+<img src="assets/unet_mid/image_18.png"  alt="Example generated image"/>
+<img src="assets/unet_mid/image_6.png"  alt="Example generated image"/>
 
 A PyTorch implementation of a flow-based generative model for creating pixel 
 art characters. This project uses continuous normalizing flows with a U-Net 
@@ -6,12 +14,15 @@ architecture to learn the data distribution and generate high-quality pixel art 
 
 ## 🎨 Overview
 This project implements a flow-based generative model that learns to transform simple 
-noise distributions into complex pixel art characters. The model uses:
+noise distributions (Isotropic Gaussian) into complex pixel art characters. The model uses:
 
 - **Flow-based architecture**: Continuous normalizing flows for high-quality generation
 - **U-Net backbone**: Time-conditioned U-Net for learning the vector field
 - **RGBA support**: Full transparency support for pixel art sprites
 - **Flexible training**: Configurable noise schedules and training parameters
+
+## 🤖 Model architecture
+*TODO: Soon - Final model architecture image*
 
 ## 🚀 Features
 - **Multiple noise schedules**: Linear and cosine scheduling options
@@ -19,6 +30,7 @@ noise distributions into complex pixel art characters. The model uses:
 - **Training utilities**: Learning rate scheduling, checkpointing, and visualization
 - **Flexible sampling**: Support for different generation modes and timesteps
 - **Experiment tracking**: CSV logging and training visualization tools
+- **Exponential Moving Average (EMA)**: Stabilizes training and improves sample quality
 
 ## 📋 Requirements
 Install the required dependencies:
@@ -31,26 +43,27 @@ pip install -r requirements.txt
 
 ```
 ├── dataset/
-│   ├── images/                    # Your pixel art dataset (RGBA images)
-│   └── image_only_dataset.py      # Dataset loading utilities
+│   ├── images/                          # Your pixel art dataset (RGBA images)
+│   └── image_only_dataset.py            # Dataset loading utilities
 ├── diff_eq/
-│   ├── ode_sde.py                 # ODE/SDE implementations
-│   └── simulator.py               # Numerical integration methods
+│   ├── ode_sde.py                       # ODE/SDE implementations
+│   └── simulator.py                     # Numerical integration methods
 ├── models/
-│   └── unet.py                    # U-Net architecture with time conditioning
+│   ├── conditional_vector_field.py      # Conditional vector field
+│   └── unet.py                          # U-Net architecture with time conditioning
 ├── sampling/
 │   ├── conditional_probability_path.py  # Flow probability paths
-│   ├── noise_scheduling.py        # Alpha/beta scheduling functions
-│   └── sampleable.py             # Dataset samplers and distributions
+│   ├── noise_scheduling.py              # Alpha/beta scheduling functions
+│   └── sampleable.py                    # Dataset samplers and distributions
 ├── training/
-│   ├── evaluation.py             # Evaluation metrics (FID)
-│   ├── lr_scheduling.py          # Learning rate schedulers
-│   ├── objective.py              # Training objectives
-│   ├── trainer.py                # Main training loop
-│   └── experiments/              # Training outputs and checkpoints
+│   ├── ema.py                           # Exponential Moving Averag
+│   ├── evaluation.py                    # Evaluation metrics (FID)
+│   ├── lr_scheduling.py                 # Learning rate schedulers
+│   ├── trainer.py                       # Main training loop
+│   └── experiments/                     # Training notebooks, outputs and checkpoints
 └── utils/
-    ├── helpers.py                # Utility functions
-    └── visualization.py          # Training visualization tools
+    ├── helpers.py                       # Utility functions
+    └── visualization.py                 # Training visualization tools
 ```
 
 
@@ -63,7 +76,7 @@ The training process automatically logs:
 - **Generated samples**: Saved periodically for visual inspection
 - **Model checkpoints**: Best model based on validation FID
 
-Logs are saved to `training/experiments/unet/training_log.csv` and can be visualized using the built-in visualization tools.
+Logs are saved to `training/experiments/model_name/training_log.csv` and can be visualized using the built-in visualization tools.
 
 ## 📄 License
 
