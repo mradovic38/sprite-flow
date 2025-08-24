@@ -9,9 +9,9 @@
 <img src="assets/unet_mid/image_6.png"  alt="Example generated image"/>
 </p>
 
-A PyTorch implementation of a flow-based generative model for creating pixel 
+A PyTorch implementation of a flow-based generative model for creating 128x128 RGBA pixel 
 art characters. This project uses continuous normalizing flows with a U-Net 
-architecture to learn the data distribution and generate high-quality pixel art sprites.
+architecture to learn the data distribution and generate quality pixel art sprites.
 
 ## 🎨 Overview
 This project implements a flow-based generative model that learns to transform simple 
