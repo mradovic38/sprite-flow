@@ -23,7 +23,7 @@ def visualize_training_logs(
 
     # === Prepare Validation Data ===
     validation_every = df["val_metric"].isna().sum() + 1
-    validated_epochs = df[df["epoch"].apply(lambda e: e % validation_every == 0)]
+    validated_epochs = df[df["epoch"].apply(lambda e: (e + 1) % validation_every == 0)]
     validated_epochs = validated_epochs[validated_epochs["val_metric"].notna()]
 
     # === Plot Training Loss ===
