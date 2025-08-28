@@ -23,7 +23,12 @@ noise distributions (Isotropic Gaussian) into complex pixel art characters. The 
 - **Flexible training**: Configurable noise schedules and training parameters
 
 ## 🤖 Model architecture
-*TODO: Soon - Final model architecture image*
+<p>
+    <img src="assets/architecture/unet.png"  alt="Model architecture"/>
+</p>
+<p>
+    <em>U-Net-based model architecture used in the final model</em>
+</p>
 
 ## 🚀 Features
 - **Multiple noise schedules**: Linear and cosine scheduling options
