@@ -69,7 +69,7 @@ def resize_images(images: torch.Tensor, size=(299,299)) -> torch.Tensor:
     :param size: desired output image dimensions
     :return: resized tensor of images, shape (num_images, C, new_H, new_W)
     """
-    return F.interpolate(images, size=size, mode='bilinear', align_corners=False)
+    return F.interpolate(images, size=size, mode='nearest-exact')
 
 
 def normalize_to_unit(images: torch.Tensor) -> torch.Tensor:
