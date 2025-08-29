@@ -1,3 +1,4 @@
+import gc
 import torch
 from torch import nn
 from torchvision.transforms.functional import to_pil_image
@@ -19,7 +20,6 @@ def model_size_b(model: nn.Module) -> int:
     for buf in model.buffers():
         size += buf.nelement() * buf.element_size()
     return size
-
 
 def tensor_to_rgba_image(tensor: torch.Tensor) -> Image.Image:
     """
@@ -46,7 +46,6 @@ def tensor_to_rgba_image(tensor: torch.Tensor) -> Image.Image:
 
     return to_pil_image(tensor, mode='RGBA')
 
-
 def rgba_to_rgb(images: torch.Tensor) -> torch.Tensor:
     """
     Converts RGBA images to RGB color space.
@@ -61,7 +60,6 @@ def rgba_to_rgb(images: torch.Tensor) -> torch.Tensor:
     rgb = rgb * alpha + (1 - alpha) * 1.0
     return rgb
 
-
 def resize_images(images: torch.Tensor, size=(299,299)) -> torch.Tensor:
     """
     Resizes images to given size.
@@ -71,7 +69,6 @@ def resize_images(images: torch.Tensor, size=(299,299)) -> torch.Tensor:
     """
     return F.interpolate(images, size=size, mode='nearest-exact')
 
-
 def normalize_to_unit(images: torch.Tensor) -> torch.Tensor:
     """
     Normalizes images from [-1, 1] to [0, 1] range.
@@ -80,3 +77,8 @@ def normalize_to_unit(images: torch.Tensor) -> torch.Tensor:
     """
     # [-1,1] -> [0,1]
     return ((images + 1) / 2).clamp(0, 1)
+
+def clear_cuda():
+    gc.collect()                          # Python garbage collection
+    torch.cuda.empty_cache()              # clears cached memory
+    torch.cuda.ipc_collect()              # releases shared memory (optional)
