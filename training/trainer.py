@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Tuple
+from typing import Tuple, Optional
 
 import torch
 from torch import nn
@@ -46,7 +46,21 @@ class Trainer(ABC):
         pass
 
     @abstractmethod
-    def evaluate(self, **kwargs) -> torch.Tensor:
+    def evaluate(
+            self,
+            batch_size: int,
+            device: torch.device,
+            num_timesteps: int = 100,
+            mode: str = 'val',
+            **kwargs) -> torch.Tensor:
+        """
+        Evaluate the model on the evaluation metric
+        :param batch_size
+        :param device: Device to perform computation of the metric on
+        :param num_timesteps: With how many timesteps to simulate denoising
+        :param mode: 'val' or 'test'
+        :return: Computed evaluation metric
+        """
         pass
 
     @abstractmethod
@@ -84,6 +98,8 @@ class Trainer(ABC):
             device: torch.device,
             num_epochs: int,
             batch_size: int = 128,
+            val_batch_size: int = 128,
+            num_val_batches: Optional[int] = None,
             lr: float = 1e-3,
             weight_decay: float = 0,
             validate_every: int = 1,
@@ -99,6 +115,8 @@ class Trainer(ABC):
         :param device: device to train on
         :param num_epochs: total number of training epochs
         :param batch_size
+        :param val_batch_size: Batch size for computing validation metrics
+        :param num_val_batches: On how many batches to perform validation
         :param lr: learning rate
         :param weight_decay: Weight decay - if 0, uses Adam, if >0 uses AdamW as optimizer
         :param validate_every: validation frequency (number of epochs)
@@ -163,7 +181,12 @@ class Trainer(ABC):
             if validate_every > 0 and (epoch + 1) % validate_every == 0:
                 self.model.eval()
                 with torch.no_grad():
-                    val_metric = self.evaluate(batch_size=batch_size, mode='val', device=device, **kwargs)
+                    val_metric = self.evaluate(
+                        batch_size=val_batch_size,
+                        mode='val',
+                        device=device,
+                        num_val_batches=num_val_batches
+                    )
                     val_metric_value = val_metric.item()
                     last_val_metric = val_metric_value
                     log["val_metric"] = f"{last_val_metric:.4f}"
@@ -246,7 +269,14 @@ class UnguidedTrainer(Trainer):
         loss = torch.mean((ut_theta - ut_ref) ** 2)
         return loss
 
-    def evaluate(self, batch_size: int, device: torch.device, num_timesteps: int = 100, mode: str = 'val') -> torch.Tensor:
+    def evaluate(
+            self,
+            batch_size: int,
+            device: torch.device,
+            num_timesteps: int = 100,
+            mode: str = 'val',
+            num_batches: Optional[int] = None
+    ) -> torch.Tensor:
         assert isinstance(self.path.p_data, IterableSampleable) and isinstance(self.model, ConditionalVectorField)
 
         if self.ema:
@@ -259,6 +289,11 @@ class UnguidedTrainer(Trainer):
 
         # Loop over validation/test dataset
         for real_batch in self.path.p_data.iterate_dataset(batch_size, mode=mode):
+            if num_batches:
+                if num_batches == 0:
+                    break
+                num_batches -= 1
+
             B = real_batch.shape[0]
             real_batch = real_batch.to(device)  # (B, 4, H, W)
 
@@ -269,10 +304,6 @@ class UnguidedTrainer(Trainer):
 
             # Update FID
             self.eval_metric.evaluate_batch(real_batch, generated, device)
-
-            # For training validation, only first batch
-            if mode == 'val':
-                break
 
         if self.ema:
             self.ema.restore()
