@@ -22,7 +22,7 @@ class Sampleable(ABC):
         pass
 
 
-class IterableSampleable(ABC):
+class IterableSampleable(Sampleable, ABC):
     """
     Sampleable for finite datasets.
     """
@@ -35,6 +35,7 @@ class IterableSampleable(ABC):
         :return: yields batches as torch tensors
         """
         pass
+
 
 class IsotropicGaussian(nn.Module, Sampleable):
     def __init__(self, shape: List[int], std: float = 1.0):
@@ -54,7 +55,7 @@ class IsotropicGaussian(nn.Module, Sampleable):
         return self.std * torch.randn(num_samples, C, H, W, device=device)
 
 
-class PixelArtSampler(nn.Module):
+class PixelArtSampler(nn.Module, IterableSampleable):
     def __init__(self, root_dir: str = "/dataset/images",
                  random_seed: int = 42,
                  train_factor: float = 0.70,
