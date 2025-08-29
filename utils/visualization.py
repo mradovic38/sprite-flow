@@ -1,15 +1,21 @@
+from typing import List
+
 import pandas as pd
+import math
 import matplotlib.pyplot as plt
+from PIL.Image import Image
 
 
 def visualize_training_logs(
         log_path: str = 'experiments/unet/training_log.csv',
-        scale: str = "linear"
+        loss_scale: str = "linear",
+        metric_scale: str = "linear"
 ):
     """
     Plot training loss and validation metric over epochs.
     :param log_path: path to log CSV file
-    :param scale: on which scale to plot loss/metric values (https://matplotlib.org/stable/users/explain/axes/axes_scales.html)
+    :param loss_scale: scale on which scale to plot loss values (https://matplotlib.org/stable/users/explain/axes/axes_scales.html)
+    :param metric_scale: scale on which scale to plot validation metric values
     :return:
     """
     df = pd.read_csv(log_path)
@@ -48,7 +54,7 @@ def visualize_training_logs(
     plt.legend()
     plt.xlim(df["epoch"].min() - .5, df["epoch"].max() + .5)
     plt.tight_layout()
-    plt.yscale(scale)
+    plt.yscale(loss_scale)
     plt.show()
 
     # === Plot Validation Metric ===
@@ -73,5 +79,27 @@ def visualize_training_logs(
     plt.legend()
     plt.xlim(df["epoch"].min() - .5, df["epoch"].max() + .5)
     plt.tight_layout()
-    plt.yscale(scale)
+    plt.yscale(metric_scale)
+    plt.show()
+
+
+def plot_generated_images(images: List[Image], max_row: int = 5, figsize_per_image: int = 3) -> None:
+    """
+    Plots a list of PIL images.
+    :param images: List of PIL Image objects
+    :param max_row: Maximum number of images to plot per row
+    :param figsize_per_image: Size of each image in the figure (default 3)
+    """
+    n_images = len(images)
+    n_cols = min(max_row, n_images)
+    n_rows = math.ceil(n_images / n_cols)
+
+    plt.figure(figsize=(figsize_per_image * n_cols, figsize_per_image * n_rows))
+
+    for i, img in enumerate(images):
+        plt.subplot(n_rows, n_cols, i + 1)
+        plt.imshow(img)
+        plt.axis('off')
+
+    plt.tight_layout()
     plt.show()
