@@ -64,11 +64,10 @@ class PixelArtDataset(Dataset):
         """
         Visualize original vs augmentations
         """
-        fig, axes = plt.subplots(num_samples, 2, figsize=(16, 4 * num_samples))
-        fig.suptitle('Pixel Art Augmentation Comparison', fontsize=16)
+        fig, axes = plt.subplots(num_samples, 2, figsize=(8, 4 * num_samples))
 
         # Column headers
-        col_titles = ['Original', 'Heavy Aug']
+        col_titles = ['Original', 'Augmented']
         for i, title in enumerate(col_titles):
             axes[0, i].set_title(title, fontsize=12, fontweight='bold')
 
