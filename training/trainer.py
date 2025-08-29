@@ -16,7 +16,7 @@ from training.lr_scheduling import CosineWarmupScheduler
 from training.ema import EMA
 from diff_eq.ode_sde import UnguidedVectorFieldODE
 from diff_eq.simulator import EulerSimulator
-from utils.helpers import model_size_b, MiB, tensor_to_rgba_image
+from utils.helpers import model_size_b, MiB, tensor_to_rgba_image, normalize_to_unit
 
 
 class Trainer(ABC):
@@ -74,38 +74,19 @@ class Trainer(ABC):
         """
         pass
 
-    @abstractmethod
-    def generate_predictions(
-            self,
-            num_images: int,
-            mode: str = 'train',
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        :param num_images: number of images to generate
-        :param mode: 'train', 'val' or 'test'
-        :return: (ut_theta, z, x, t)
-        """
-        pass
-
-    def get_optimizer(self, lr: float, weight_decay: float = 0):
-        if weight_decay > 0:
-            return torch.optim.Adam(self.model.parameters(), lr=lr)
-        else:
-            return torch.optim.AdamW(self.model.parameters(), lr=lr, weight_decay=weight_decay)
-
     def train(
             self,
             device: torch.device,
             num_epochs: int,
             batch_size: int = 128,
+            lr: float = 1e-3,
+            lr_warmup_steps_frac: float = 0.1,
+            weight_decay: float = 0,
+            resume: bool = False,
             val_batch_size: int = 128,
             num_val_batches: Optional[int] = None,
-            lr: float = 1e-3,
-            weight_decay: float = 0,
             validate_every: int = 1,
             val_timesteps: int = 100,
-            resume: bool = False,
-            lr_warmup_steps_frac: float = 0.1,
             num_images_to_save: int = 5,
             save_images_every: int = 10,
             **kwargs
@@ -115,14 +96,14 @@ class Trainer(ABC):
         :param device: device to train on
         :param num_epochs: total number of training epochs
         :param batch_size
+        :param lr: learning rate
+        :param lr_warmup_steps_frac: learning rate warmup steps - fraction of the total training steps
+        :param weight_decay: Weight decay - if 0, uses Adam, if >0 uses AdamW as optimizer
         :param val_batch_size: Batch size for computing validation metrics
         :param num_val_batches: On how many batches to perform validation
-        :param lr: learning rate
-        :param weight_decay: Weight decay - if 0, uses Adam, if >0 uses AdamW as optimizer
         :param validate_every: validation frequency (number of epochs)
         :param val_timesteps: number of denoising timesteps for validation
         :param resume: whether to resume training or to start over, overwriting the checkpoint file
-        :param lr_warmup_steps_frac: learning rate warmup steps - fraction of the total training steps
         :param num_images_to_save: number of images to save for manual evaluation
         :param save_images_every: how often to save images for manual evaluation (number of epochs)
         """
@@ -226,6 +207,25 @@ class Trainer(ABC):
             pbar.set_postfix(log)
 
         self.model.eval()
+
+    @abstractmethod
+    def generate_predictions(
+            self,
+            num_images: int,
+            mode: str = 'train',
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        :param num_images: number of images to generate
+        :param mode: 'train', 'val' or 'test'
+        :return: (ut_theta, z, x, t)
+        """
+        pass
+
+    def get_optimizer(self, lr: float, weight_decay: float = 0):
+        if weight_decay > 0:
+            return torch.optim.Adam(self.model.parameters(), lr=lr)
+        else:
+            return torch.optim.AdamW(self.model.parameters(), lr=lr, weight_decay=weight_decay)
 
 
 class UnguidedTrainer(Trainer):
@@ -332,10 +332,9 @@ class UnguidedTrainer(Trainer):
         simulator = EulerSimulator(ode)
         generated = simulator.simulate(x0, ts)  # (B, 4, H, W)
 
+        images = tensor_to_rgba_image(normalize_to_unit(generated))
         for i in range(num_images_to_save):
-            img_tensor = generated[i]
-            img = tensor_to_rgba_image(img_tensor)  # Expects a tensor in [-1, 1] or [0, 1], shape (4, H, W)
-            img.save(os.path.join(output_dir, f"image_{i}.png"))
+            images[i].save(os.path.join(output_dir, f"image_{i}.png"))
 
         if self.ema:
             self.ema.restore()
