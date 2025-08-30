@@ -223,9 +223,9 @@ class Trainer(ABC):
 
     def get_optimizer(self, lr: float, weight_decay: float = 0) -> torch.optim.Optimizer:
         if weight_decay > 0:
-            return torch.optim.Adam(self.model.parameters(), lr=lr)
-        else:
             return torch.optim.AdamW(self.model.parameters(), lr=lr, weight_decay=weight_decay)
+        else:
+            return torch.optim.Adam(self.model.parameters(), lr=lr)
 
 
 class UnguidedTrainer(Trainer):
