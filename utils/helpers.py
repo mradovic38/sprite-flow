@@ -7,6 +7,7 @@ from torch import nn
 import torch.nn.functional as F
 from PIL import Image
 
+from training.ema import EMA
 
 MiB = 1024 ** 2
 
@@ -102,3 +103,29 @@ def save_generated_assets(images: List[Image.Image], num_timesteps: int, path: s
                 img.save(f"assets/unet/image_{i + j}-{num_timesteps}.png")
                 break
             j += 1
+
+
+def load_checkpoint(
+        model: nn.Module,
+        device: torch.device,
+        filepath: str = "training/experiments/unet/best_model.pt",
+        optimizer: torch.optim.Optimizer = None,
+        ema: EMA = None
+) -> None:
+    """
+    Loads model from checkpoint.
+    :param model: Model to load
+    :param device: Device to the load model on
+    :param filepath: Path to .pt file to load model from
+    :param optimizer: Optimizer (optional)
+    :param ema: EMA instance (if used)
+    """
+    checkpoint = torch.load(filepath, map_location=device)
+    model.load_state_dict(checkpoint['model_state'])
+
+    # Load EMA parameters if available
+    if ema and 'ema_state' in checkpoint:
+        ema.load_state_dict(checkpoint['ema_state'])
+
+    if optimizer:
+        optimizer.load_state_dict(checkpoint['optimizer'])

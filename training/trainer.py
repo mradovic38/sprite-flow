@@ -221,7 +221,7 @@ class Trainer(ABC):
         """
         pass
 
-    def get_optimizer(self, lr: float, weight_decay: float = 0):
+    def get_optimizer(self, lr: float, weight_decay: float = 0) -> torch.optim.Optimizer:
         if weight_decay > 0:
             return torch.optim.Adam(self.model.parameters(), lr=lr)
         else:

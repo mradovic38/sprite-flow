@@ -1,9 +1,8 @@
 from typing import List
 
-import torch
-import torch.nn.functional as F
-from torch import nn
 import math
+import torch
+from torch import nn
 
 from models.conditional_vector_field import ConditionalVectorField
 

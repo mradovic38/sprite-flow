@@ -41,7 +41,7 @@ class IsotropicGaussian(nn.Module, Sampleable):
     def __init__(self, shape: List[int], std: float = 1.0):
         """
         :param shape: shape of sampled data, e.g. [4, 128, 128]
-        :param std: standard deviation for RGB sampling
+        :param std: standard deviation for sampling
         """
         super().__init__()
         self.shape = shape
