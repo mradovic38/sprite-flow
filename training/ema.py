@@ -3,18 +3,20 @@ import torch
 
 
 class EMA:
-    def __init__(self, model: nn.Module, max_decay: float = 0.999, update_every: int = 1) -> None:
+    def __init__(self, model: nn.Module, max_decay: float = 0.9995, warmup_steps: int = 1000, update_every: int = 1) -> None:
         """
         Exponential Moving Average of model weights and buffers.
         :param model: pytorch model
         :param max_decay: Maximum value of the decay factor of EMA
+        :param warmup_steps: Warmup steps for EMA - on that step EMA will reach max_decay
         :param update_every: Number of steps between EMA updates
         """
         self.model = model
         self.max_decay = max_decay
         self.shadow = {}
         self.backup = {}
-        self.step_count = 0  # Track steps internally
+        self.step_count = 1  # Track steps internally
+        self.warmup_steps = warmup_steps
         self.update_every = update_every
 
         # Store initial parameters
@@ -30,7 +32,7 @@ class EMA:
             return
 
         # Calculate adaptive decay that grows from 0 to max_decay
-        decay = min(self.max_decay, (1 + self.step_count) / (10 + self.step_count))
+        decay = min(self.max_decay, (1 + self.step_count) / (self.warmup_steps + self.step_count))
         self.step_count += 1
 
         with torch.no_grad():
