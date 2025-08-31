@@ -282,33 +282,33 @@ class UnguidedTrainer(Trainer):
         if self.ema:
             self.ema.apply_shadow()
 
-        ode = UnguidedVectorFieldODE(self.model)
-        simulator = EulerSimulator(ode)
+        try:
+            ode = UnguidedVectorFieldODE(self.model)
+            simulator = EulerSimulator(ode)
 
-        self.eval_metric.prepare(device)
+            self.eval_metric.prepare(device)
 
-        # Loop over validation/test dataset
-        for real_batch in self.path.p_data.iterate_dataset(batch_size, mode=mode):
-            if num_batches:
-                if num_batches == 0:
+            # Loop over validation/test dataset
+            for idx, real_batch in enumerate(self.path.p_data.iterate_dataset(batch_size, mode=mode)):
+                if num_batches is not None and idx >= num_batches:
                     break
-                num_batches -= 1
 
-            B = real_batch.shape[0]
-            real_batch = real_batch.to(device)  # (B, 4, H, W)
+                B = real_batch.shape[0]
+                real_batch = real_batch.to(device)  # (B, 4, H, W)
 
-            # Generate matching number of fake images
-            ts = torch.linspace(0, 1, steps=num_timesteps, device=device).view(1, -1, 1, 1, 1).expand(B, -1, 1, 1, 1)
-            x0 = self.path.p_simple.sample(B).to(device)  # (B, 4, H, W)
-            generated = simulator.simulate(x0, ts)[:, :4]  # RGBA
+                # Generate matching number of fake images
+                ts = torch.linspace(0, 1, steps=num_timesteps, device=device).view(1, -1, 1, 1, 1).expand(B, -1, 1, 1, 1)
+                x0 = self.path.p_simple.sample(B).to(device)  # (B, 4, H, W)
+                generated = simulator.simulate(x0, ts)[:, :4]  # RGBA
 
-            # Update FID
-            self.eval_metric.evaluate_batch(real_batch, generated, device)
+                # Update FID
+                self.eval_metric.evaluate_batch(real_batch, generated, device)
 
-        if self.ema:
-            self.ema.restore()
+            return self.eval_metric.compute()
 
-        return self.eval_metric.compute()
+        finally:
+            if self.ema:
+                self.ema.restore()
 
     def save_images(self, num_images_to_save: int, epoch: int, device: torch.device, num_timesteps: int = 100) -> None:
         assert isinstance(self.path.p_data, IterableSampleable) and isinstance(self.model, ConditionalVectorField)

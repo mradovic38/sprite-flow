@@ -38,9 +38,9 @@ class EvaluationMetric(ABC):
 
 
 class FID(EvaluationMetric):
-    def __init__(self, feature=2048, normalize=True, image_size=(299, 299)):
+    def __init__(self, feature=2048, image_size=(299, 299)):
         super().__init__()
-        self.metric = FrechetInceptionDistance(feature=feature, normalize=normalize)
+        self.metric = FrechetInceptionDistance(feature=feature, normalize=True)
         self.image_size = image_size
 
     def _process_images(self, images: torch.Tensor) -> torch.Tensor:
