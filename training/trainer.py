@@ -166,7 +166,7 @@ class Trainer(ABC):
                         batch_size=val_batch_size,
                         mode='val',
                         device=device,
-                        num_val_batches=num_val_batches
+                        num_batches=num_val_batches
                     )
                     val_metric_value = val_metric.item()
                     last_val_metric = val_metric_value
