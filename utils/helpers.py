@@ -30,8 +30,10 @@ def tensor_to_rgba_image(tensor: torch.Tensor) -> List[Image.Image]:
     :param tensor: Tensor with values in [0, 1], shape (N, C, H, W) or (C, H, W)
     :return: RGBA PIL images.
     """
+    tensor = tensor.to('cpu') # move to cpu
+
     if tensor.ndim == 3:  # (C, H, W)
-        tensor = tensor.unsqueeze(0)  # add batch dim
+        tensor = tensor.unsqueeze(0) # add batch dim
 
     images: List[Image.Image] = []
     for img in tensor:  # iterate over batch
@@ -47,7 +49,7 @@ def tensor_to_rgba_image(tensor: torch.Tensor) -> List[Image.Image]:
         else:
             raise ValueError("Expected tensor with 1, 3, or 4 channels")
 
-        img = (img * 255).byte().permute(1, 2, 0).numpy()  # (H, W, 4)
+        img = (img * 255).byte().permute(1, 2, 0).cpu().numpy()  # (H, W, 4)
         images.append(Image.fromarray(img, mode="RGBA"))
 
     return images
@@ -103,7 +105,6 @@ def save_generated_assets(images: List[Image.Image], num_timesteps: int, path: s
                 img.save(f"assets/unet/image_{i + j}-{num_timesteps}.png")
                 break
             j += 1
-
 
 def load_checkpoint(
         model: nn.Module,
