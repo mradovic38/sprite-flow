@@ -87,6 +87,7 @@ class Trainer(ABC):
             num_val_batches: Optional[int] = None,
             validate_every: int = 1,
             val_timesteps: int = 100,
+            val_warmup_steps_frac: int = 0,
             num_images_to_save: int = 5,
             save_images_every: int = 10,
             **kwargs
@@ -104,6 +105,7 @@ class Trainer(ABC):
         :param validate_every: validation frequency (number of epochs)
         :param val_timesteps: number of denoising timesteps for validation
         :param resume: whether to resume training or to start over, overwriting the checkpoint file
+        :param val_warmup_steps_frac: fraction of total training steps explaining when to begin with validation
         :param num_images_to_save: number of images to save for manual evaluation
         :param save_images_every: how often to save images for manual evaluation (number of epochs)
         """
@@ -159,7 +161,7 @@ class Trainer(ABC):
                 "best_val_metric": last_best_val_metric
             }
 
-            if validate_every > 0 and (epoch + 1) % validate_every == 0:
+            if validate_every > 0 and (epoch + 1) % validate_every == 0 and (epoch + 1) > val_warmup_steps_frac * num_epochs:
                 self.model.eval()
                 with torch.no_grad():
                     val_metric = self.evaluate(
