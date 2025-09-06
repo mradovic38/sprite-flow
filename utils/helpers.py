@@ -102,7 +102,7 @@ def save_generated_assets(images: List[Image.Image], num_timesteps: int, path: s
     for i, img in enumerate(images):
         while True:
             if not glob.glob(f"{path}/image_{i + j}" + "*"):
-                img.save(f"assets/unet/image_{i + j}-{num_timesteps}.png")
+                img.save(f"{path}/image_{i + j}-{num_timesteps}.png")
                 break
             j += 1
 
