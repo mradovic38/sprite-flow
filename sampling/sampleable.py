@@ -59,7 +59,8 @@ class PixelArtSampler(nn.Module, IterableSampleable):
     def __init__(self, root_dir: str = "/dataset/images",
                  random_seed: int = 42,
                  train_factor: float = 0.70,
-                 val_factor: float = 0.15) -> None:
+                 val_factor: float = 0.15,
+                 augment_train: bool = True) -> None:
         super().__init__()
 
         # Collect image paths
@@ -83,7 +84,7 @@ class PixelArtSampler(nn.Module, IterableSampleable):
         test_idx = indices[train_size + val_size:]
 
         # Assign datasets
-        self.data_train = PixelArtDataset([all_images[i] for i in train_idx], augment=True)
+        self.data_train = PixelArtDataset([all_images[i] for i in train_idx], augment=augment_train)
         self.data_val   = PixelArtDataset([all_images[i] for i in val_idx], augment=False)
         self.data_test  = PixelArtDataset([all_images[i] for i in test_idx], augment=False)
 

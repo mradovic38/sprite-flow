@@ -35,14 +35,13 @@ class PixelArtDataset(Dataset):
         # Augmentation + Preprocessing
         self.augment_transform = transforms.Compose([
             transforms.Resize((128, 128)),
-            transforms.RandomHorizontalFlip(p=0.5),
-            RGBAColorJitter(0.5, 0.5, 0.6, 0.5),
+            RGBAColorJitter(0.1, 0.1, 0, 0),
             transforms.RandomAffine(
                 degrees=0,
-                translate=(0.15, 0.15),
+                translate=(0.025, 0.025),
+                scale=(0.95, 1.05),
                 interpolation=transforms.InterpolationMode.NEAREST,
             ),
-            RandomChannelDropout(0.1),
             transforms.ToTensor(),
             transforms.Normalize((0.5, 0.5, 0.5, 0.5),
                                  (0.5, 0.5, 0.5, 0.5)),
