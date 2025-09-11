@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Tuple
+from typing import Tuple, Optional
 
 import torch
 from torch import nn
@@ -16,7 +16,7 @@ from training.lr_scheduling import CosineWarmupScheduler
 from training.ema import EMA
 from diff_eq.ode_sde import UnguidedVectorFieldODE
 from diff_eq.simulator import EulerSimulator
-from utils.helpers import model_size_b, MiB, tensor_to_rgba_image
+from utils.helpers import model_size_b, MiB, tensor_to_rgba_image, normalize_to_unit
 
 
 class Trainer(ABC):
@@ -46,7 +46,21 @@ class Trainer(ABC):
         pass
 
     @abstractmethod
-    def evaluate(self, **kwargs) -> torch.Tensor:
+    def evaluate(
+            self,
+            batch_size: int,
+            device: torch.device,
+            num_timesteps: int = 100,
+            mode: str = 'val',
+            **kwargs) -> torch.Tensor:
+        """
+        Evaluate the model on the evaluation metric
+        :param batch_size
+        :param device: Device to perform computation of the metric on
+        :param num_timesteps: With how many timesteps to simulate denoising
+        :param mode: 'val' or 'test'
+        :return: Computed evaluation metric
+        """
         pass
 
     @abstractmethod
@@ -60,36 +74,20 @@ class Trainer(ABC):
         """
         pass
 
-    @abstractmethod
-    def generate_predictions(
-            self,
-            num_images: int,
-            mode: str = 'train',
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        :param num_images: number of images to generate
-        :param mode: 'train', 'val' or 'test'
-        :return: (ut_theta, z, x, t)
-        """
-        pass
-
-    def get_optimizer(self, lr: float, weight_decay: float = 0):
-        if weight_decay > 0:
-            return torch.optim.Adam(self.model.parameters(), lr=lr)
-        else:
-            return torch.optim.AdamW(self.model.parameters(), lr=lr, weight_decay=weight_decay)
-
     def train(
             self,
             device: torch.device,
             num_epochs: int,
             batch_size: int = 128,
             lr: float = 1e-3,
+            lr_warmup_steps_frac: float = 0.1,
             weight_decay: float = 0,
+            resume: bool = False,
+            val_batch_size: int = 128,
+            num_val_batches: Optional[int] = None,
             validate_every: int = 1,
             val_timesteps: int = 100,
-            resume: bool = False,
-            lr_warmup_steps_frac: float = 0.1,
+            val_warmup_steps_frac: int = 0,
             num_images_to_save: int = 5,
             save_images_every: int = 10,
             **kwargs
@@ -100,11 +98,14 @@ class Trainer(ABC):
         :param num_epochs: total number of training epochs
         :param batch_size
         :param lr: learning rate
+        :param lr_warmup_steps_frac: learning rate warmup steps - fraction of the total training steps
         :param weight_decay: Weight decay - if 0, uses Adam, if >0 uses AdamW as optimizer
+        :param val_batch_size: Batch size for computing validation metrics
+        :param num_val_batches: On how many batches to perform validation
         :param validate_every: validation frequency (number of epochs)
         :param val_timesteps: number of denoising timesteps for validation
         :param resume: whether to resume training or to start over, overwriting the checkpoint file
-        :param lr_warmup_steps_frac: learning rate warmup steps - fraction of the total training steps
+        :param val_warmup_steps_frac: fraction of total training steps explaining when to begin with validation
         :param num_images_to_save: number of images to save for manual evaluation
         :param save_images_every: how often to save images for manual evaluation (number of epochs)
         """
@@ -160,10 +161,15 @@ class Trainer(ABC):
                 "best_val_metric": last_best_val_metric
             }
 
-            if validate_every > 0 and (epoch + 1) % validate_every == 0:
+            if validate_every > 0 and (epoch + 1) % validate_every == 0 and (epoch + 1) > val_warmup_steps_frac * num_epochs:
                 self.model.eval()
                 with torch.no_grad():
-                    val_metric = self.evaluate(batch_size=batch_size, mode='val', device=device, **kwargs)
+                    val_metric = self.evaluate(
+                        batch_size=val_batch_size,
+                        mode='val',
+                        device=device,
+                        num_batches=num_val_batches
+                    )
                     val_metric_value = val_metric.item()
                     last_val_metric = val_metric_value
                     log["val_metric"] = f"{last_val_metric:.4f}"
@@ -203,6 +209,25 @@ class Trainer(ABC):
             pbar.set_postfix(log)
 
         self.model.eval()
+
+    @abstractmethod
+    def generate_predictions(
+            self,
+            num_images: int,
+            mode: str = 'train',
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        :param num_images: number of images to generate
+        :param mode: 'train', 'val' or 'test'
+        :return: (ut_theta, z, x, t)
+        """
+        pass
+
+    def get_optimizer(self, lr: float, weight_decay: float = 0) -> torch.optim.Optimizer:
+        if weight_decay > 0:
+            return torch.optim.AdamW(self.model.parameters(), lr=lr, weight_decay=weight_decay)
+        else:
+            return torch.optim.Adam(self.model.parameters(), lr=lr)
 
 
 class UnguidedTrainer(Trainer):
@@ -246,38 +271,46 @@ class UnguidedTrainer(Trainer):
         loss = torch.mean((ut_theta - ut_ref) ** 2)
         return loss
 
-    def evaluate(self, batch_size: int, device: torch.device, num_timesteps: int = 100, mode: str = 'val') -> torch.Tensor:
+    def evaluate(
+            self,
+            batch_size: int,
+            device: torch.device,
+            num_timesteps: int = 100,
+            mode: str = 'val',
+            num_batches: Optional[int] = None
+    ) -> torch.Tensor:
         assert isinstance(self.path.p_data, IterableSampleable) and isinstance(self.model, ConditionalVectorField)
 
         if self.ema:
             self.ema.apply_shadow()
 
-        ode = UnguidedVectorFieldODE(self.model)
-        simulator = EulerSimulator(ode)
+        try:
+            ode = UnguidedVectorFieldODE(self.model)
+            simulator = EulerSimulator(ode)
 
-        self.eval_metric.prepare(device)
+            self.eval_metric.prepare(device)
 
-        # Loop over validation/test dataset
-        for real_batch in self.path.p_data.iterate_dataset(batch_size, mode=mode):
-            B = real_batch.shape[0]
-            real_batch = real_batch.to(device)  # (B, 4, H, W)
+            # Loop over validation/test dataset
+            for idx, real_batch in enumerate(self.path.p_data.iterate_dataset(batch_size, mode=mode)):
+                if num_batches is not None and idx >= num_batches:
+                    break
 
-            # Generate matching number of fake images
-            ts = torch.linspace(0, 1, steps=num_timesteps, device=device).view(1, -1, 1, 1, 1).expand(B, -1, 1, 1, 1)
-            x0 = self.path.p_simple.sample(B).to(device)  # (B, 4, H, W)
-            generated = simulator.simulate(x0, ts)[:, :4]  # RGBA
+                B = real_batch.shape[0]
+                real_batch = real_batch.to(device)  # (B, 4, H, W)
 
-            # Update FID
-            self.eval_metric.evaluate_batch(real_batch, generated, device)
+                # Generate matching number of fake images
+                ts = torch.linspace(0, 1, steps=num_timesteps, device=device).view(1, -1, 1, 1, 1).expand(B, -1, 1, 1, 1)
+                x0 = self.path.p_simple.sample(B).to(device)  # (B, 4, H, W)
+                generated = simulator.simulate(x0, ts)[:, :4]  # RGBA
 
-            # For training validation, only first batch
-            if mode == 'val':
-                break
+                # Update FID
+                self.eval_metric.evaluate_batch(real_batch, generated, device)
 
-        if self.ema:
-            self.ema.restore()
+            return self.eval_metric.compute()
 
-        return self.eval_metric.compute()
+        finally:
+            if self.ema:
+                self.ema.restore()
 
     def save_images(self, num_images_to_save: int, epoch: int, device: torch.device, num_timesteps: int = 100) -> None:
         assert isinstance(self.path.p_data, IterableSampleable) and isinstance(self.model, ConditionalVectorField)
@@ -301,10 +334,9 @@ class UnguidedTrainer(Trainer):
         simulator = EulerSimulator(ode)
         generated = simulator.simulate(x0, ts)  # (B, 4, H, W)
 
+        images = tensor_to_rgba_image(normalize_to_unit(generated))
         for i in range(num_images_to_save):
-            img_tensor = generated[i]
-            img = tensor_to_rgba_image(img_tensor)  # Expects a tensor in [-1, 1] or [0, 1], shape (4, H, W)
-            img.save(os.path.join(output_dir, f"image_{i}.png"))
+            images[i].save(os.path.join(output_dir, f"image_{i}.png"))
 
         if self.ema:
             self.ema.restore()

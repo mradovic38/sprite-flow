@@ -3,44 +3,45 @@ import torch
 
 
 class EMA:
-    def __init__(self, model: nn.Module, max_decay: float = 0.999) -> None:
+    def __init__(self, model: nn.Module, device: torch.device, max_decay: float = 0.9995, warmup_steps: int = 1000, update_every: int = 1) -> None:
         """
         Exponential Moving Average of model weights and buffers.
         :param model: pytorch model
+        :param device: device to perform computation on
         :param max_decay: Maximum value of the decay factor of EMA
+        :param warmup_steps: Warmup steps for EMA - on that step EMA will reach max_decay
+        :param update_every: Number of steps between EMA updates
         """
         self.model = model
         self.max_decay = max_decay
         self.shadow = {}
         self.backup = {}
-        self.step_count = 0  # Track steps internally
+        self.step_count = 1  # Track steps internally
+        self.warmup_steps = warmup_steps
+        self.update_every = update_every
 
         # Store initial parameters
         for name, param in model.named_parameters():
             if param.requires_grad:
-                self.shadow[name] = param.clone().detach()
-
-        # Store initial buffers (BatchNorm running stats, etc.)
-        for name, buffer in model.named_buffers():
-            self.shadow[name] = buffer.clone().detach()
+                self.shadow[name] = param.data.clone().to(device)
 
     def update(self) -> None:
         """
         Updates EMA weights and buffers with adaptive decay.
         """
+        if self.step_count % self.update_every != 0:
+            return
+
         # Calculate adaptive decay that grows from 0 to max_decay
-        decay = min(self.max_decay, (1 + self.step_count) / (10 + self.step_count))
+        decay = min(self.max_decay, (1 + self.step_count) / (self.warmup_steps + self.step_count))
         self.step_count += 1
 
         with torch.no_grad():
             # Update parameters
             for name, param in self.model.named_parameters():
                 if param.requires_grad:
-                    self.shadow[name] = decay * self.shadow[name] + (1.0 - decay) * param.detach()
-
-            # Update buffers
-            for name, buffer in self.model.named_buffers():
-                self.shadow[name] = decay * self.shadow[name] + (1.0 - decay) * buffer.detach()
+                    new_shadow = (1.0 - decay) * param.data + decay * self.shadow[name]
+                    self.shadow[name] = new_shadow.clone()
 
     def apply_shadow(self):
         """
@@ -49,13 +50,8 @@ class EMA:
         # Backup and apply parameters
         for name, param in self.model.named_parameters():
             if param.requires_grad:
-                self.backup[name] = param.clone()
-                param.data.copy_(self.shadow[name])
-
-        # Backup and apply buffers
-        for name, buffer in self.model.named_buffers():
-            self.backup[name] = buffer.clone()
-            buffer.data.copy_(self.shadow[name])
+                self.backup[name] = param.data.clone()
+                param.data = self.shadow[name]
 
     def restore(self) -> None:
         """
@@ -63,15 +59,8 @@ class EMA:
         """
         # Restore parameters
         for name, param in self.model.named_parameters():
-            if param.requires_grad and name in self.backup:
-                param.data.copy_(self.backup[name])
-
-        # Restore buffers
-        for name, buffer in self.model.named_buffers():
-            if name in self.backup:
-                buffer.data.copy_(self.backup[name])
-
-        self.backup = {}
+            if param.requires_grad:
+                param.data =  self.backup[name]
 
     def state_dict(self):
         """
@@ -87,6 +76,9 @@ class EMA:
         """
         Loads EMA shadow weights from state dict.
         """
-        self.shadow = state_dict['shadow'].copy()
         self.step_count = state_dict.get('step_count', 0)
         self.max_decay = state_dict.get('max_decay', self.max_decay)
+
+        for name, param in self.model.named_parameters():
+            if param.requires_grad and name in state_dict['shadow']:
+                self.shadow[name] = state_dict['shadow'][name].clone()
