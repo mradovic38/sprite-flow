@@ -1,12 +1,12 @@
 # SpriteFlow: Flow-based Pixel Art Character Generation
 
 <p float="left">
-<img src="assets/unet_mid/image_9.png"  alt="Example generated image"/>
-<img src="assets/unet_mid/image_11.png"  alt="Example generated image"/>
-<img src="assets/unet_mid/image_13.png"  alt="Example generated image"/>
-<img src="assets/unet_mid/image_15.png"  alt="Example generated image"/>
-<img src="assets/unet_mid/image_18.png"  alt="Example generated image"/>
-<img src="assets/unet_mid/image_6.png"  alt="Example generated image"/>
+<img src="assets/unet_mid_ema/image_0.png"  alt="Example generated image"/>
+<img src="assets/unet_mid_ema/image_1.png"  alt="Example generated image"/>
+<img src="assets/unet_mid_ema/image_3.png"  alt="Example generated image"/>
+<img src="assets/unet_mid_ema/image_10.png"  alt="Example generated image"/>
+<img src="assets/unet_mid_ema/image_6.png"  alt="Example generated image"/>
+<img src="assets/unet_mid_ema/image_7.png"  alt="Example generated image"/>
 </p>
 
 A PyTorch implementation of a flow-based generative model for creating 128x128 RGBA pixel 

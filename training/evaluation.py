@@ -38,9 +38,9 @@ class EvaluationMetric(ABC):
 
 
 class FID(EvaluationMetric):
-    def __init__(self, feature=2048, normalize=True, image_size=(299, 299)):
+    def __init__(self, feature=2048, image_size=(299, 299)):
         super().__init__()
-        self.metric = FrechetInceptionDistance(feature=feature, normalize=normalize)
+        self.metric = FrechetInceptionDistance(feature=feature, normalize=True)
         self.image_size = image_size
 
     def _process_images(self, images: torch.Tensor) -> torch.Tensor:
@@ -49,7 +49,7 @@ class FID(EvaluationMetric):
         rgb = resize_images(rgb, self.image_size)  # return float32 [0,1]
         return rgb
 
-    def evaluate_batch(self, real_data: torch.Tensor, generated_data: torch.Tensor, device: torch.device) -> torch.Tensor:
+    def evaluate_batch(self, real_data: torch.Tensor, generated_data: torch.Tensor, device: torch.device):
         real = self._process_images(real_data).to(device)
         fake = self._process_images(generated_data).to(device)
 
@@ -64,5 +64,3 @@ class FID(EvaluationMetric):
     def prepare(self, device) -> None:
         self.metric.to(device)
         self.metric.reset()
-
-

@@ -16,3 +16,12 @@ dataset/images
 *.pth
 training/experiments/**/*.csv
 training/experiments/**/*.png
+
+# Tests
+training/experiments/unet_large
+training/experiments/unet_mid
+training/experiments/unet_mid_ema
+training/experiments/unet_test
+assets/unet_large
+assets/unet_mid_ema
+assets/unet_mid

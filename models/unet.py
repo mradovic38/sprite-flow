@@ -1,9 +1,8 @@
 from typing import List
 
-import torch
-import torch.nn.functional as F
-from torch import nn
 import math
+import torch
+from torch import nn
 
 from models.conditional_vector_field import ConditionalVectorField
 
@@ -104,6 +103,8 @@ class Midcoder(nn.Module):
             ResidualLayer(channels, t_embed_dim) for _ in range(num_residual_layers)
         ])
         self.dropout_p = dropout_p
+        if self.dropout_p > 0:
+            self.dropout = nn.Dropout2d(p=dropout_p)
 
     def forward(self, x: torch.Tensor, t_embed: torch.Tensor) -> torch.Tensor:
         """
@@ -113,7 +114,8 @@ class Midcoder(nn.Module):
         # Pass through residual blocks: (bs, c, h, w) -> (bs, c, h, w)
         for block in self.res_blocks:
             x = block(x, t_embed)
-            x = F.dropout2d(x, p=self.dropout_p, training=True)
+            if self.dropout_p > 0:
+                x = self.dropout(x)
 
         return x
 
