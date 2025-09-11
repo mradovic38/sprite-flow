@@ -1,12 +1,12 @@
 # SpriteFlow: Flow-based Pixel Art Character Generation
 
 <p float="left">
-<img src="assets/unet_mid_ema/image_0.png"  alt="Example generated image"/>
-<img src="assets/unet_mid_ema/image_1.png"  alt="Example generated image"/>
-<img src="assets/unet_mid_ema/image_3.png"  alt="Example generated image"/>
-<img src="assets/unet_mid_ema/image_10.png"  alt="Example generated image"/>
-<img src="assets/unet_mid_ema/image_6.png"  alt="Example generated image"/>
-<img src="assets/unet_mid_ema/image_7.png"  alt="Example generated image"/>
+<img src="assets/unet_v3/image_22-200.png"  alt="Example generated image"/>
+<img src="assets/unet_v3/image_25-300.png"  alt="Example generated image"/>
+<img src="assets/unet_v3/image_29-250.png"  alt="Example generated image"/>
+<img src="assets/unet_v3/image_55-220.png"  alt="Example generated image"/>
+<img src="assets/unet_v3/image_62-200.png"  alt="Example generated image"/>
+<img src="assets/unet_v3/image_68-150.png"  alt="Example generated image"/>
 </p>
 
 A PyTorch implementation of a flow-based generative model for creating 128x128 RGBA pixel 
@@ -27,7 +27,7 @@ noise distributions (Isotropic Gaussian) into complex pixel art characters. The 
     <img src="assets/architecture/unet.png"  alt="Model architecture"/>
 </p>
 <p>
-    <em>U-Net-based model architecture used in the final model</em>
+    <em>U-Net-based model architecture used in the final model. Each Encoder/Decoder doubles the number of channels of the previous block.</em>
 </p>
 
 ## 🚀 Features
