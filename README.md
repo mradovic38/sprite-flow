@@ -84,8 +84,31 @@ The training process automatically logs:
 
 Logs are saved to `training/experiments/model_name/training_log.csv` and can be visualized using the built-in visualization tools.
 
-## 📄 License
+### Final model's training loss and FID over epochs:
+  <div style="display: flex; align-items: flex-start; gap: 20px;">
+    <div>
+        <p>
+            <img src="assets/unet_v3/unet_v3_loss.png" alt="unet_v3 loss over time"/>
+        </p>
+        <p>
+            <em>Train loss over epochs on logarithmic scale.</em>
+        </p>
+    </div>
+    <div>
+        <p>
+            <img src="assets/unet_v3/unet_v3_fid.png" alt="unet_v3 FID over time"/>
+        </p>
+        <p>
+            <em>Validation FID over time (for a total of 512 validation images).</em>
+        </p>
+    </div>
+  </div>
 
+## 🗂️ Dataset
+The model was trained on a dataset [pixel_art_2dgame_charecter_sprites_idle](https://www.kaggle.com/datasets/ayhantasyurt/pixel-art-2dgame-charecter-sprites-idle) sourced from Kaggle. The dataset contains 7596 128x128 idle sprites inspired by retro RPGs and is released under the [**Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)**](https://creativecommons.org/licenses/by-sa/4.0/) license.
+This means you are free to share and adapt the data as long as appropriate credit is given and any derivative works are distributed under the same license.
+
+## 📄 License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## 🤝 Contributing
