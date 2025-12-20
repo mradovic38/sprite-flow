@@ -124,7 +124,7 @@ class Decoder(nn.Module):
     def __init__(self, channels_in: int, channels_out: int, num_residual_layers: int, t_embed_dim: int):
         super().__init__()
         self.upsample = nn.Sequential(
-            nn.Upsample(scale_factor=2, mode='bilinear'),
+            nn.Upsample(scale_factor=2, mode='nearest'),
             nn.Conv2d(channels_in, channels_out, kernel_size=3, padding=1)
         )
         self.res_blocks = nn.ModuleList([
