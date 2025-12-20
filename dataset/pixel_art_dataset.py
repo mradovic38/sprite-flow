@@ -35,13 +35,7 @@ class PixelArtDataset(Dataset):
         # Augmentation + Preprocessing
         self.augment_transform = transforms.Compose([
             transforms.Resize((128, 128)),
-            RGBAColorJitter(0.1, 0.1, 0, 0),
-            transforms.RandomAffine(
-                degrees=0,
-                translate=(0.025, 0.025),
-                scale=(0.95, 1.05),
-                interpolation=transforms.InterpolationMode.NEAREST,
-            ),
+            RGBAColorJitter(0.3, 0.2, 0, 0),
             transforms.ToTensor(),
             transforms.Normalize((0.5, 0.5, 0.5, 0.5),
                                  (0.5, 0.5, 0.5, 0.5)),
@@ -64,7 +58,8 @@ class PixelArtDataset(Dataset):
         Visualize original vs augmentations
         """
         fig, axes = plt.subplots(num_samples, 2, figsize=(8, 4 * num_samples))
-
+        if num_samples == 1:
+            axes = np.expand_dims(axes, axis=0)
         # Column headers
         col_titles = ['Original', 'Augmented']
         for i, title in enumerate(col_titles):
@@ -105,5 +100,5 @@ if __name__ == "__main__":
 
     dataset.visualize_augmentations(
         save_path="../assets/random/augmentation_comparison.png",
-        num_samples=6
+        num_samples=5
     )
